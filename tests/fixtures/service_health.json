@@ -1,0 +1,8 @@
+[
+  {
+    "service": "checkout-api",
+    "status": "unhealthy",
+    "detail": "Readiness endpoint returned HTTP 503."
+  }
+]
+

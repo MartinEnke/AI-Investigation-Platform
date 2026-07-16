@@ -1,0 +1,14 @@
+[
+  {
+    "deployment_id": "deploy-1042",
+    "level": "info",
+    "message": "Deployment started."
+  },
+  {
+    "deployment_id": "deploy-1042",
+    "level": "error",
+    "reason": "timeout",
+    "message": "Health check timed out after 30 seconds."
+  }
+]
+

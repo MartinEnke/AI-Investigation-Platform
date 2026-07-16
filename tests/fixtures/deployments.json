@@ -1,0 +1,15 @@
+[
+  {
+    "id": "deploy-1042",
+    "service": "checkout-api",
+    "status": "failed",
+    "failed_stage": "health_check"
+  },
+  {
+    "id": "deploy-1043",
+    "service": "inventory-api",
+    "status": "failed",
+    "failed_stage": "health_check"
+  }
+]
+
