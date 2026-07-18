@@ -40,5 +40,29 @@
     "service": "accounts-api",
     "status": "failed",
     "failed_stage": "migration"
+  },
+  {
+    "id": "deploy-1049",
+    "service": "notifications-api",
+    "status": "failed",
+    "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1050",
+    "service": "catalog-api",
+    "status": "failed",
+    "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1051",
+    "service": "users-api",
+    "status": "failed",
+    "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1052",
+    "service": "admin-api",
+    "status": "failed",
+    "failed_stage": "startup"
   }
 ]

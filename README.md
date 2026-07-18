@@ -3,6 +3,8 @@
 A small, deterministic proof of concept that explains deployment failures from local JSON evidence.
 Milestone 3 supports health-check timeouts, missing required environment variables, and database
 migration failures while explicitly abstaining on unsupported or conflicting evidence.
+Milestone 4 validates these behaviours with 11 controlled synthetic evaluation scenarios,
+including selective exact checks for confidence and limitations.
 
 ## Setup
 

@@ -31,5 +31,35 @@
     "deployment_id": "deploy-1048",
     "level": "error",
     "message": "Failed to apply migrations: relation users does not exist"
+  },
+  {
+    "deployment_id": "deploy-1049",
+    "level": "error",
+    "message": "kEyErRoR: database_url"
+  },
+  {
+    "deployment_id": "deploy-1050",
+    "level": "error",
+    "message": "Connection reset by peer"
+  },
+  {
+    "deployment_id": "deploy-1050",
+    "level": "error",
+    "message": "Missing environment variable DATABASE_URL"
+  },
+  {
+    "deployment_id": "deploy-1051",
+    "level": "error",
+    "message": "relation users does not exist"
+  },
+  {
+    "deployment_id": "deploy-1052",
+    "level": "error",
+    "message": "Missing environment variable DATABASE_URL"
+  },
+  {
+    "deployment_id": "deploy-1052",
+    "level": "error",
+    "message": "Migration failed"
   }
 ]

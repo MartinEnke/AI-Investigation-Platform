@@ -47,5 +47,37 @@
     "expected_root_cause": "The deployment failed because a database migration could not be applied.",
     "expected_inconclusive": false,
     "expected_evidence_sources": ["deployment", "logs"]
+  },
+  {
+    "id": "supported-environment-variable-variant",
+    "question": "Why did deployment deploy-1049 fail?",
+    "expected_root_cause": "The deployment failed because required environment variable DATABASE_URL was missing.",
+    "expected_inconclusive": false,
+    "expected_evidence_sources": ["deployment", "logs"]
+  },
+  {
+    "id": "supported-diagnosis-after-irrelevant-error",
+    "question": "Why did deployment deploy-1050 fail?",
+    "expected_root_cause": "The deployment failed because required environment variable DATABASE_URL was missing.",
+    "expected_inconclusive": false,
+    "expected_evidence_sources": ["deployment", "logs", "logs"]
+  },
+  {
+    "id": "unsupported-generic-database-error",
+    "question": "Why did deployment deploy-1051 fail?",
+    "expected_root_cause": null,
+    "expected_inconclusive": true,
+    "expected_evidence_sources": ["deployment", "logs"]
+  },
+  {
+    "id": "conflicting-supported-patterns",
+    "question": "Why did deployment deploy-1052 fail?",
+    "expected_root_cause": null,
+    "expected_inconclusive": true,
+    "expected_evidence_sources": ["deployment", "logs", "logs"],
+    "expected_confidence": 0.25,
+    "expected_limitations": [
+      "Conflicting supported failure patterns matched the available evidence."
+    ]
   }
 ]

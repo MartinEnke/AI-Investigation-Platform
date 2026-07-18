@@ -28,6 +28,8 @@ def _parse_scenario(item: object, index: int, path: Path) -> EvaluationScenario:
     expected_root_cause = item.get("expected_root_cause")
     expected_inconclusive = item.get("expected_inconclusive")
     expected_sources = item.get("expected_evidence_sources")
+    expected_confidence = item.get("expected_confidence")
+    expected_limitations = item.get("expected_limitations")
 
     if not isinstance(scenario_id, str) or not scenario_id:
         raise ValueError(f"Scenario {index} in {path} requires a non-empty string id")
@@ -41,6 +43,16 @@ def _parse_scenario(item: object, index: int, path: Path) -> EvaluationScenario:
         isinstance(source, str) for source in expected_sources
     ):
         raise ValueError(f"Scenario {scenario_id} requires a list of evidence source strings")
+    if expected_confidence is not None and (
+        isinstance(expected_confidence, bool)
+        or not isinstance(expected_confidence, (int, float))
+    ):
+        raise ValueError(f"Scenario {scenario_id} has an invalid expected_confidence")
+    if expected_limitations is not None and (
+        not isinstance(expected_limitations, list)
+        or not all(isinstance(limitation, str) for limitation in expected_limitations)
+    ):
+        raise ValueError(f"Scenario {scenario_id} has invalid expected_limitations")
 
     return EvaluationScenario(
         id=scenario_id,
@@ -48,5 +60,10 @@ def _parse_scenario(item: object, index: int, path: Path) -> EvaluationScenario:
         expected_root_cause=expected_root_cause,
         expected_inconclusive=expected_inconclusive,
         expected_evidence_sources=tuple(expected_sources),
+        expected_confidence=(
+            float(expected_confidence) if expected_confidence is not None else None
+        ),
+        expected_limitations=(
+            tuple(expected_limitations) if expected_limitations is not None else None
+        ),
     )
-

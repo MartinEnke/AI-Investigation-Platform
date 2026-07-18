@@ -23,6 +23,16 @@ def evaluate_scenario(
     root_cause_matches = actual.root_cause == scenario.expected_root_cause
     inconclusive_matches = actual_inconclusive == scenario.expected_inconclusive
     evidence_sources_match = actual_sources == scenario.expected_evidence_sources
+    confidence_matches = (
+        None
+        if scenario.expected_confidence is None
+        else actual.confidence == scenario.expected_confidence
+    )
+    limitations_match = (
+        None
+        if scenario.expected_limitations is None
+        else actual.limitations == scenario.expected_limitations
+    )
 
     failures: list[str] = []
     if not root_cause_matches:
@@ -37,6 +47,14 @@ def evaluate_scenario(
         failures.append(
             f"evidence sources: expected {scenario.expected_evidence_sources!r}, got {actual_sources!r}"
         )
+    if confidence_matches is False:
+        failures.append(
+            f"confidence: expected {scenario.expected_confidence!r}, got {actual.confidence!r}"
+        )
+    if limitations_match is False:
+        failures.append(
+            f"limitations: expected {scenario.expected_limitations!r}, got {actual.limitations!r}"
+        )
 
     return EvaluationResult(
         scenario_id=scenario.id,
@@ -44,9 +62,15 @@ def evaluate_scenario(
         root_cause_matches=root_cause_matches,
         inconclusive_matches=inconclusive_matches,
         evidence_sources_match=evidence_sources_match,
+        confidence_matches=confidence_matches,
+        limitations_match=limitations_match,
         actual_root_cause=actual.root_cause,
         actual_inconclusive=actual_inconclusive,
         actual_evidence_sources=actual_sources,
+        expected_confidence=scenario.expected_confidence,
+        actual_confidence=actual.confidence,
+        expected_limitations=scenario.expected_limitations,
+        actual_limitations=actual.limitations,
         failures=tuple(failures),
     )
 
@@ -88,4 +112,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
