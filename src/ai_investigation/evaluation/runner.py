@@ -19,6 +19,12 @@ def evaluate_scenario(
     actual = investigator.investigate(request_from_question(scenario.question))
     actual_inconclusive = actual.root_cause is None
     actual_sources = tuple(item.source for item in actual.evidence)
+    actual_decision_outcome = (
+        actual.decision_trace.outcome if actual.decision_trace is not None else None
+    )
+    actual_matched_rule_ids = (
+        actual.decision_trace.matched_rule_ids if actual.decision_trace is not None else None
+    )
 
     root_cause_matches = actual.root_cause == scenario.expected_root_cause
     inconclusive_matches = actual_inconclusive == scenario.expected_inconclusive
@@ -32,6 +38,16 @@ def evaluate_scenario(
         None
         if scenario.expected_limitations is None
         else actual.limitations == scenario.expected_limitations
+    )
+    decision_outcome_matches = (
+        None
+        if scenario.expected_decision_outcome is None
+        else actual_decision_outcome == scenario.expected_decision_outcome
+    )
+    matched_rule_ids_match = (
+        None
+        if scenario.expected_matched_rule_ids is None
+        else actual_matched_rule_ids == scenario.expected_matched_rule_ids
     )
 
     failures: list[str] = []
@@ -55,6 +71,16 @@ def evaluate_scenario(
         failures.append(
             f"limitations: expected {scenario.expected_limitations!r}, got {actual.limitations!r}"
         )
+    if decision_outcome_matches is False:
+        failures.append(
+            "decision outcome: "
+            f"expected {scenario.expected_decision_outcome!r}, got {actual_decision_outcome!r}"
+        )
+    if matched_rule_ids_match is False:
+        failures.append(
+            "matched rule IDs: "
+            f"expected {scenario.expected_matched_rule_ids!r}, got {actual_matched_rule_ids!r}"
+        )
 
     return EvaluationResult(
         scenario_id=scenario.id,
@@ -64,6 +90,8 @@ def evaluate_scenario(
         evidence_sources_match=evidence_sources_match,
         confidence_matches=confidence_matches,
         limitations_match=limitations_match,
+        decision_outcome_matches=decision_outcome_matches,
+        matched_rule_ids_match=matched_rule_ids_match,
         actual_root_cause=actual.root_cause,
         actual_inconclusive=actual_inconclusive,
         actual_evidence_sources=actual_sources,
@@ -71,6 +99,10 @@ def evaluate_scenario(
         actual_confidence=actual.confidence,
         expected_limitations=scenario.expected_limitations,
         actual_limitations=actual.limitations,
+        expected_decision_outcome=scenario.expected_decision_outcome,
+        actual_decision_outcome=actual_decision_outcome,
+        expected_matched_rule_ids=scenario.expected_matched_rule_ids,
+        actual_matched_rule_ids=actual_matched_rule_ids,
         failures=tuple(failures),
     )
 

@@ -98,6 +98,7 @@ class DeploymentFailureInvestigator:
                 evidence=selected_evidence,
                 confidence=match.confidence,
                 limitations=(),
+                decision_trace=diagnosis.decision_trace,
             )
 
         if diagnosis.has_conflict:
@@ -107,6 +108,7 @@ class DeploymentFailureInvestigator:
                 evidence=tuple(evidence),
                 confidence=0.25,
                 limitations=("Conflicting supported failure patterns matched the available evidence.",),
+                decision_trace=diagnosis.decision_trace,
             )
 
         if not limitations:
@@ -117,4 +119,5 @@ class DeploymentFailureInvestigator:
             evidence=tuple(evidence),
             confidence=0.25,
             limitations=tuple(limitations),
+            decision_trace=diagnosis.decision_trace,
         )

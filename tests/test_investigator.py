@@ -27,6 +27,9 @@ def test_successful_root_cause_detection(investigator: DeploymentFailureInvestig
             summary="checkout-api was unhealthy: Readiness endpoint returned HTTP 503.",
         ),
     )
+    assert result.decision_trace is not None
+    assert result.decision_trace.outcome == "single_match"
+    assert result.decision_trace.matched_rule_ids == ("health_check_timeout",)
 
 
 def test_evidence_ordering(investigator: DeploymentFailureInvestigator) -> None:
@@ -42,6 +45,7 @@ def test_unknown_deployment(investigator: DeploymentFailureInvestigator) -> None
     assert result.evidence == ()
     assert result.confidence == 0.0
     assert "not found" in result.answer
+    assert result.decision_trace is None
 
 
 def test_missing_deployment_id(investigator: DeploymentFailureInvestigator) -> None:
@@ -51,6 +55,7 @@ def test_missing_deployment_id(investigator: DeploymentFailureInvestigator) -> N
     assert result.evidence == ()
     assert result.confidence == 0.0
     assert "no deployment ID" in result.answer
+    assert result.decision_trace is None
 
 
 def test_inconclusive_result_with_incomplete_evidence(investigator: DeploymentFailureInvestigator) -> None:

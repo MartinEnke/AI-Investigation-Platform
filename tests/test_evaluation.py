@@ -38,10 +38,19 @@ def test_scenario_loading(fixture_directory: Path) -> None:
 def test_existing_scenario_without_optional_expectations_loads(
     fixture_directory: Path,
 ) -> None:
-    scenario = scenarios(fixture_directory)[0]
+    scenario = scenarios(fixture_directory)[1]
 
     assert scenario.expected_confidence is None
     assert scenario.expected_limitations is None
+    assert scenario.expected_decision_outcome is None
+    assert scenario.expected_matched_rule_ids is None
+
+
+def test_selective_trace_expectations_are_loaded(fixture_directory: Path) -> None:
+    scenario = scenarios(fixture_directory)[0]
+
+    assert scenario.expected_decision_outcome == "single_match"
+    assert scenario.expected_matched_rule_ids == ("health_check_timeout",)
 
 
 def test_valid_optional_confidence_is_parsed(tmp_path: Path) -> None:
@@ -188,6 +197,43 @@ def test_limitations_are_compared_in_exact_order(
     assert result.actual_limitations == (
         "No error log is available for the deployment.",
         "No service-health record is available for the target service.",
+    )
+
+
+def test_decision_outcome_mismatch_is_reported(
+    fixture_directory: Path,
+    investigator: DeploymentFailureInvestigator,
+) -> None:
+    scenario = replace(
+        scenarios(fixture_directory)[0],
+        expected_decision_outcome="no_match",
+    )
+
+    result = evaluate_scenario(scenario, investigator)
+
+    assert not result.passed
+    assert result.decision_outcome_matches is False
+    assert result.failures == (
+        "decision outcome: expected 'no_match', got 'single_match'",
+    )
+
+
+def test_matched_rule_ids_mismatch_is_reported(
+    fixture_directory: Path,
+    investigator: DeploymentFailureInvestigator,
+) -> None:
+    scenario = replace(
+        scenarios(fixture_directory)[0],
+        expected_matched_rule_ids=("database_migration_failure",),
+    )
+
+    result = evaluate_scenario(scenario, investigator)
+
+    assert not result.passed
+    assert result.matched_rule_ids_match is False
+    assert result.failures == (
+        "matched rule IDs: expected ('database_migration_failure',), "
+        "got ('health_check_timeout',)",
     )
 
 

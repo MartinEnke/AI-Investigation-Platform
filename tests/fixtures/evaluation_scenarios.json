@@ -4,7 +4,9 @@
     "question": "Why did deployment deploy-1042 fail?",
     "expected_root_cause": "The deployment health check timed out because the target service was unhealthy.",
     "expected_inconclusive": false,
-    "expected_evidence_sources": ["deployment", "logs", "service_health"]
+    "expected_evidence_sources": ["deployment", "logs", "service_health"],
+    "expected_decision_outcome": "single_match",
+    "expected_matched_rule_ids": ["health_check_timeout"]
   },
   {
     "id": "unknown-deployment",
@@ -32,7 +34,9 @@
     "question": "Why did deployment deploy-1046 fail?",
     "expected_root_cause": null,
     "expected_inconclusive": true,
-    "expected_evidence_sources": ["deployment", "logs", "service_health"]
+    "expected_evidence_sources": ["deployment", "logs", "service_health"],
+    "expected_decision_outcome": "no_match",
+    "expected_matched_rule_ids": []
   },
   {
     "id": "supported-missing-environment-variable",
@@ -78,6 +82,11 @@
     "expected_confidence": 0.25,
     "expected_limitations": [
       "Conflicting supported failure patterns matched the available evidence."
+    ],
+    "expected_decision_outcome": "multiple_matches",
+    "expected_matched_rule_ids": [
+      "missing_environment_variable",
+      "database_migration_failure"
     ]
   }
 ]

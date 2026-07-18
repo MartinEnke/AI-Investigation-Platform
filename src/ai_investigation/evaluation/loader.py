@@ -30,6 +30,8 @@ def _parse_scenario(item: object, index: int, path: Path) -> EvaluationScenario:
     expected_sources = item.get("expected_evidence_sources")
     expected_confidence = item.get("expected_confidence")
     expected_limitations = item.get("expected_limitations")
+    expected_decision_outcome = item.get("expected_decision_outcome")
+    expected_matched_rule_ids = item.get("expected_matched_rule_ids")
 
     if not isinstance(scenario_id, str) or not scenario_id:
         raise ValueError(f"Scenario {index} in {path} requires a non-empty string id")
@@ -53,6 +55,17 @@ def _parse_scenario(item: object, index: int, path: Path) -> EvaluationScenario:
         or not all(isinstance(limitation, str) for limitation in expected_limitations)
     ):
         raise ValueError(f"Scenario {scenario_id} has invalid expected_limitations")
+    if expected_decision_outcome is not None and expected_decision_outcome not in (
+        "single_match",
+        "no_match",
+        "multiple_matches",
+    ):
+        raise ValueError(f"Scenario {scenario_id} has an invalid expected_decision_outcome")
+    if expected_matched_rule_ids is not None and (
+        not isinstance(expected_matched_rule_ids, list)
+        or not all(isinstance(rule_id, str) for rule_id in expected_matched_rule_ids)
+    ):
+        raise ValueError(f"Scenario {scenario_id} has invalid expected_matched_rule_ids")
 
     return EvaluationScenario(
         id=scenario_id,
@@ -65,5 +78,11 @@ def _parse_scenario(item: object, index: int, path: Path) -> EvaluationScenario:
         ),
         expected_limitations=(
             tuple(expected_limitations) if expected_limitations is not None else None
+        ),
+        expected_decision_outcome=expected_decision_outcome,
+        expected_matched_rule_ids=(
+            tuple(expected_matched_rule_ids)
+            if expected_matched_rule_ids is not None
+            else None
         ),
     )

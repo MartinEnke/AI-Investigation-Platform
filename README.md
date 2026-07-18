@@ -5,6 +5,8 @@ Milestone 3 supports health-check timeouts, missing required environment variabl
 migration failures while explicitly abstaining on unsupported or conflicting evidence.
 Milestone 4 validates these behaviours with 11 controlled synthetic evaluation scenarios,
 including selective exact checks for confidence and limitations.
+Milestone 5 adds an immutable structured decision trace containing ordered rule evaluations,
+condition results, matched rule identifiers and the aggregate decision outcome.
 
 ## Setup
 

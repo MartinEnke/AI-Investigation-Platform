@@ -5,6 +5,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from ai_investigation.models import DecisionTrace, RuleConditionResult, RuleEvaluation
+
 JsonRecord = Mapping[str, Any]
 
 
@@ -30,9 +32,10 @@ class DiagnosisMatch:
 
 @dataclass(frozen=True, slots=True)
 class DiagnosisResult:
-    """All rule matches, retained so zero, one, and conflicts stay explicit."""
+    """All rule matches and the facts produced while evaluating them."""
 
     matches: tuple[DiagnosisMatch, ...]
+    decision_trace: DecisionTrace
 
     @property
     def match(self) -> DiagnosisMatch | None:
@@ -43,7 +46,10 @@ class DiagnosisResult:
         return len(self.matches) > 1
 
 
-DiagnosisRule = Callable[[DiagnosisContext], DiagnosisMatch | None]
+DiagnosisRule = Callable[
+    [DiagnosisContext],
+    tuple[RuleEvaluation, DiagnosisMatch | None],
+]
 
 _MISSING_VARIABLE_PATTERNS = (
     re.compile(r"\bmissing environment variable\s+([A-Z_][A-Z0-9_]*)\b", re.IGNORECASE),
@@ -63,30 +69,42 @@ _MIGRATION_CONTEXT_PATTERN = re.compile(r"\b(?:migration|migrations|alembic)\b",
 _MISSING_RELATION_PATTERN = re.compile(r"\brelation users does not exist\b", re.IGNORECASE)
 
 
-def health_check_timeout_rule(context: DiagnosisContext) -> DiagnosisMatch | None:
+def health_check_timeout_rule(
+    context: DiagnosisContext,
+) -> tuple[RuleEvaluation, DiagnosisMatch | None]:
     """Match only the exact predicates used by the original implementation."""
 
+    deployment_failed = context.deployment.get("status") == "failed"
+    health_check_stage = context.deployment.get("failed_stage") == "health_check"
     timed_out = any(log.get("reason") == "timeout" for log in context.error_logs)
     health = context.service_health
-    if not (
-        context.deployment.get("status") == "failed"
-        and context.deployment.get("failed_stage") == "health_check"
-        and timed_out
-        and health is not None
-        and health.get("status") == "unhealthy"
-    ):
-        return None
+    unhealthy = health is not None and health.get("status") == "unhealthy"
+    conditions = (
+        RuleConditionResult("deployment_status_is_failed", deployment_failed),
+        RuleConditionResult("failed_stage_is_health_check", health_check_stage),
+        RuleConditionResult("error_log_reason_is_timeout", timed_out),
+        RuleConditionResult("service_health_is_unhealthy", unhealthy),
+    )
+    matched = all(condition.matched for condition in conditions)
+    evaluation = RuleEvaluation("health_check_timeout", matched, conditions)
+    if not matched:
+        return evaluation, None
 
     root_cause = "The deployment health check timed out because the target service was unhealthy."
-    return DiagnosisMatch(
-        root_cause=root_cause,
-        answer=f"Deployment {context.deployment_id} failed during its health check. {root_cause}",
-        confidence=1.0,
-        evidence_sources=("deployment", "logs", "service_health"),
+    return (
+        evaluation,
+        DiagnosisMatch(
+            root_cause=root_cause,
+            answer=f"Deployment {context.deployment_id} failed during its health check. {root_cause}",
+            confidence=1.0,
+            evidence_sources=("deployment", "logs", "service_health"),
+        ),
     )
 
 
-def missing_environment_variable_rule(context: DiagnosisContext) -> DiagnosisMatch | None:
+def missing_environment_variable_rule(
+    context: DiagnosisContext,
+) -> tuple[RuleEvaluation, DiagnosisMatch | None]:
     """Match three explicit missing-variable message forms, regardless of stage."""
 
     variable_name = None
@@ -99,21 +117,33 @@ def missing_environment_variable_rule(context: DiagnosisContext) -> DiagnosisMat
                 break
         if variable_name is not None:
             break
+
+    matched = variable_name is not None
+    evaluation = RuleEvaluation(
+        "missing_environment_variable",
+        matched,
+        (RuleConditionResult("error_log_contains_missing_environment_variable", matched),),
+    )
     if variable_name is None:
-        return None
+        return evaluation, None
 
     root_cause = (
         f"The deployment failed because required environment variable {variable_name} was missing."
     )
-    return DiagnosisMatch(
-        root_cause=root_cause,
-        answer=f"Deployment {context.deployment_id} failed. {root_cause}",
-        confidence=1.0,
-        evidence_sources=("deployment", "logs"),
+    return (
+        evaluation,
+        DiagnosisMatch(
+            root_cause=root_cause,
+            answer=f"Deployment {context.deployment_id} failed. {root_cause}",
+            confidence=1.0,
+            evidence_sources=("deployment", "logs"),
+        ),
     )
 
 
-def database_migration_failure_rule(context: DiagnosisContext) -> DiagnosisMatch | None:
+def database_migration_failure_rule(
+    context: DiagnosisContext,
+) -> tuple[RuleEvaluation, DiagnosisMatch | None]:
     """Match explicit migration failures or missing-relation errors with migration context."""
 
     messages = tuple(str(log.get("message", "")) for log in context.error_logs)
@@ -122,19 +152,32 @@ def database_migration_failure_rule(context: DiagnosisContext) -> DiagnosisMatch
         for message in messages
         for pattern in _DIRECT_MIGRATION_PATTERNS
     )
-    contextual_match = (
-        any(_MIGRATION_CONTEXT_PATTERN.search(message) for message in messages)
-        and any(_MISSING_RELATION_PATTERN.search(message) for message in messages)
+    migration_context = any(_MIGRATION_CONTEXT_PATTERN.search(message) for message in messages)
+    missing_users_relation = any(
+        _MISSING_RELATION_PATTERN.search(message) for message in messages
     )
-    if not (direct_match or contextual_match):
-        return None
+    matched = bool(direct_match or (migration_context and missing_users_relation))
+    evaluation = RuleEvaluation(
+        "database_migration_failure",
+        matched,
+        (
+            RuleConditionResult("error_log_contains_explicit_migration_failure", direct_match),
+            RuleConditionResult("error_log_contains_migration_context", migration_context),
+            RuleConditionResult("error_log_contains_missing_users_relation", missing_users_relation),
+        ),
+    )
+    if not matched:
+        return evaluation, None
 
     root_cause = "The deployment failed because a database migration could not be applied."
-    return DiagnosisMatch(
-        root_cause=root_cause,
-        answer=f"Deployment {context.deployment_id} failed. {root_cause}",
-        confidence=1.0,
-        evidence_sources=("deployment", "logs"),
+    return (
+        evaluation,
+        DiagnosisMatch(
+            root_cause=root_cause,
+            answer=f"Deployment {context.deployment_id} failed. {root_cause}",
+            confidence=1.0,
+            evidence_sources=("deployment", "logs"),
+        ),
     )
 
 
@@ -146,8 +189,22 @@ DIAGNOSIS_RULES: tuple[DiagnosisRule, ...] = (
 
 
 def evaluate_diagnoses(context: DiagnosisContext) -> DiagnosisResult:
-    """Evaluate every rule and retain zero, exactly one, or multiple matches."""
+    """Evaluate every rule once and retain its match and decision facts."""
 
+    results = tuple(rule(context) for rule in DIAGNOSIS_RULES)
+    evaluations = tuple(evaluation for evaluation, _ in results)
+    matches = tuple(match for _, match in results if match is not None)
+    matched_rule_ids = tuple(
+        evaluation.rule_id for evaluation in evaluations if evaluation.matched
+    )
+    outcome = (
+        "no_match"
+        if not matches
+        else "single_match"
+        if len(matches) == 1
+        else "multiple_matches"
+    )
     return DiagnosisResult(
-        matches=tuple(match for rule in DIAGNOSIS_RULES if (match := rule(context)) is not None)
+        matches=matches,
+        decision_trace=DecisionTrace(evaluations, matched_rule_ids, outcome),
     )

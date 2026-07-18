@@ -1,4 +1,5 @@
 import pytest
+from dataclasses import FrozenInstanceError
 
 from ai_investigation.diagnosis import (
     DiagnosisContext,
@@ -27,23 +28,25 @@ def context(*messages: str, stage: str = "startup") -> DiagnosisContext:
     ),
 )
 def test_accepted_missing_environment_variable_patterns(message: str) -> None:
-    match = missing_environment_variable_rule(context(message))
+    _, match = missing_environment_variable_rule(context(message))
 
     assert match is not None
     assert "DATABASE_URL" in match.root_cause
 
 
 def test_missing_environment_variable_extracts_variable_name() -> None:
-    match = missing_environment_variable_rule(context("KeyError: REDIS_ENDPOINT"))
+    _, match = missing_environment_variable_rule(context("KeyError: REDIS_ENDPOINT"))
 
     assert match is not None
     assert match.root_cause.endswith("REDIS_ENDPOINT was missing.")
 
 
 def test_missing_environment_variable_is_case_insensitive() -> None:
-    assert missing_environment_variable_rule(
+    _, match = missing_environment_variable_rule(
         context("required ENVIRONMENT VARIABLE database_url IS NOT SET")
-    ) is not None
+    )
+
+    assert match is not None
 
 
 @pytest.mark.parametrize(
@@ -56,17 +59,23 @@ def test_missing_environment_variable_is_case_insensitive() -> None:
     ),
 )
 def test_accepted_direct_migration_patterns(message: str) -> None:
-    assert database_migration_failure_rule(context(message)) is not None
+    _, match = database_migration_failure_rule(context(message))
+
+    assert match is not None
 
 
 def test_migration_context_combines_with_missing_relation() -> None:
-    assert database_migration_failure_rule(
+    _, match = database_migration_failure_rule(
         context("Applying migration revision 42", "relation users does not exist")
-    ) is not None
+    )
+
+    assert match is not None
 
 
 def test_migration_matching_is_case_insensitive() -> None:
-    assert database_migration_failure_rule(context("FAILED TO APPLY MIGRATIONS")) is not None
+    _, match = database_migration_failure_rule(context("FAILED TO APPLY MIGRATIONS"))
+
+    assert match is not None
 
 
 def test_unrelated_error_text_produces_no_match() -> None:
@@ -100,7 +109,7 @@ def test_health_check_timeout_matches_required_predicates() -> None:
         service_health={"status": "unhealthy"},
     )
 
-    match = health_check_timeout_rule(diagnosis_context)
+    _, match = health_check_timeout_rule(diagnosis_context)
 
     assert match is not None
 
@@ -142,8 +151,76 @@ def test_health_check_timeout_rejects_missing_required_predicate(
         service_health=service_health,
     )
 
-    assert health_check_timeout_rule(diagnosis_context) is None
+    _, match = health_check_timeout_rule(diagnosis_context)
+
+    assert match is None
 
 
 def test_generic_database_error_without_migration_context_does_not_match() -> None:
-    assert database_migration_failure_rule(context("relation users does not exist")) is None
+    _, match = database_migration_failure_rule(context("relation users does not exist"))
+
+    assert match is None
+
+
+def test_single_match_trace() -> None:
+    trace = evaluate_diagnoses(
+        context("Missing environment variable DATABASE_URL")
+    ).decision_trace
+
+    assert trace.outcome == "single_match"
+    assert trace.matched_rule_ids == ("missing_environment_variable",)
+
+
+def test_zero_match_trace() -> None:
+    trace = evaluate_diagnoses(context("Connection reset by peer")).decision_trace
+
+    assert trace.outcome == "no_match"
+    assert trace.matched_rule_ids == ()
+
+
+def test_conflict_trace() -> None:
+    trace = evaluate_diagnoses(
+        context("Missing environment variable DATABASE_URL", "Migration failed")
+    ).decision_trace
+
+    assert trace.outcome == "multiple_matches"
+    assert trace.matched_rule_ids == (
+        "missing_environment_variable",
+        "database_migration_failure",
+    )
+
+
+def test_rule_and_condition_order_is_deterministic() -> None:
+    trace = evaluate_diagnoses(context("Connection reset by peer")).decision_trace
+
+    assert tuple(rule.rule_id for rule in trace.evaluated_rules) == (
+        "health_check_timeout",
+        "missing_environment_variable",
+        "database_migration_failure",
+    )
+    assert tuple(
+        condition.condition for condition in trace.evaluated_rules[0].conditions
+    ) == (
+        "deployment_status_is_failed",
+        "failed_stage_is_health_check",
+        "error_log_reason_is_timeout",
+        "service_health_is_unhealthy",
+    )
+    assert tuple(
+        condition.condition for condition in trace.evaluated_rules[2].conditions
+    ) == (
+        "error_log_contains_explicit_migration_failure",
+        "error_log_contains_migration_context",
+        "error_log_contains_missing_users_relation",
+    )
+
+
+def test_trace_structures_are_immutable() -> None:
+    trace = evaluate_diagnoses(context("Connection reset by peer")).decision_trace
+
+    with pytest.raises(FrozenInstanceError):
+        trace.outcome = "single_match"  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        trace.evaluated_rules[0].matched = True  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        trace.evaluated_rules[0].conditions[0].matched = True  # type: ignore[misc]
