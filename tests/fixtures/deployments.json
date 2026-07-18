@@ -28,5 +28,17 @@
     "service": "profile-api",
     "status": "failed",
     "failed_stage": "rollout"
+  },
+  {
+    "id": "deploy-1047",
+    "service": "reporting-api",
+    "status": "failed",
+    "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1048",
+    "service": "accounts-api",
+    "status": "failed",
+    "failed_stage": "migration"
   }
 ]

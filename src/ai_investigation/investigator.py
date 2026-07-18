@@ -2,6 +2,7 @@
 
 import re
 
+from ai_investigation.diagnosis import DiagnosisContext, evaluate_diagnoses
 from ai_investigation.models import Evidence, InvestigationRequest, InvestigationResult
 from ai_investigation.tools.protocols import DeploymentTool, LogTool, ServiceHealthTool
 
@@ -59,13 +60,11 @@ class DeploymentFailureInvestigator:
         limitations: list[str] = []
 
         logs = self._logs.get_logs(request.deployment_id)
-        failure_log = next(
-            (item for item in logs if item.get("level") == "error"),
-            None,
-        )
-        if failure_log is not None:
-            evidence.append(
-                Evidence(source="logs", summary=str(failure_log.get("message", "Error recorded.")))
+        error_logs = tuple(item for item in logs if item.get("level") == "error")
+        if error_logs:
+            evidence.extend(
+                Evidence(source="logs", summary=str(item.get("message", "Error recorded.")))
+                for item in error_logs
             )
         else:
             limitations.append("No error log is available for the deployment.")
@@ -85,21 +84,29 @@ class DeploymentFailureInvestigator:
         else:
             limitations.append("No service-health record is available for the target service.")
 
-        if (
-            deployment.get("status") == "failed"
-            and deployment.get("failed_stage") == "health_check"
-            and failure_log is not None
-            and failure_log.get("reason") == "timeout"
-            and health is not None
-            and health.get("status") == "unhealthy"
-        ):
-            root_cause = "The deployment health check timed out because the target service was unhealthy."
+        diagnosis = evaluate_diagnoses(
+            DiagnosisContext(request.deployment_id, deployment, error_logs, health)
+        )
+        if diagnosis.match is not None:
+            match = diagnosis.match
+            selected_evidence = tuple(
+                item for item in evidence if item.source in match.evidence_sources
+            )
             return InvestigationResult(
-                answer=f"Deployment {request.deployment_id} failed during its health check. {root_cause}",
-                root_cause=root_cause,
-                evidence=tuple(evidence),
-                confidence=1.0,
+                answer=match.answer,
+                root_cause=match.root_cause,
+                evidence=selected_evidence,
+                confidence=match.confidence,
                 limitations=(),
+            )
+
+        if diagnosis.has_conflict:
+            return InvestigationResult(
+                answer=f"The cause of deployment {request.deployment_id}'s failure is inconclusive.",
+                root_cause=None,
+                evidence=tuple(evidence),
+                confidence=0.25,
+                limitations=("Conflicting supported failure patterns matched the available evidence.",),
             )
 
         if not limitations:
@@ -111,4 +118,3 @@ class DeploymentFailureInvestigator:
             confidence=0.25,
             limitations=tuple(limitations),
         )
-

@@ -1,6 +1,8 @@
 # AI Investigation Platform
 
 A small, deterministic proof of concept that explains deployment failures from local JSON evidence.
+Milestone 3 supports health-check timeouts, missing required environment variables, and database
+migration failures while explicitly abstaining on unsupported or conflicting evidence.
 
 ## Setup
 
@@ -34,4 +36,7 @@ python -m ai_investigation.evaluation.runner \
   --fixtures tests/fixtures
 ```
 
-The first milestone uses only read-only JSON fixtures and deterministic rules. It makes no network or model calls.
+The investigation reads deployment, error-log, and service-health fixtures in order, then evaluates
+a fixed tuple of three plain deterministic rules. Every rule is evaluated; zero matches are
+inconclusive and multiple matches produce an explicit conflict abstention. It makes no network or
+model calls.

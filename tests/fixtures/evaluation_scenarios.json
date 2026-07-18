@@ -33,6 +33,19 @@
     "expected_root_cause": null,
     "expected_inconclusive": true,
     "expected_evidence_sources": ["deployment", "logs", "service_health"]
+  },
+  {
+    "id": "supported-missing-environment-variable",
+    "question": "Why did deployment deploy-1047 fail?",
+    "expected_root_cause": "The deployment failed because required environment variable DATABASE_URL was missing.",
+    "expected_inconclusive": false,
+    "expected_evidence_sources": ["deployment", "logs"]
+  },
+  {
+    "id": "supported-database-migration-failure",
+    "question": "Why did deployment deploy-1048 fail?",
+    "expected_root_cause": "The deployment failed because a database migration could not be applied.",
+    "expected_inconclusive": false,
+    "expected_evidence_sources": ["deployment", "logs"]
   }
 ]
-

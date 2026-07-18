@@ -21,5 +21,15 @@
     "level": "error",
     "reason": "permission_denied",
     "message": "Rollout was denied by the deployment policy."
+  },
+  {
+    "deployment_id": "deploy-1047",
+    "level": "error",
+    "message": "Required environment variable DATABASE_URL is not set"
+  },
+  {
+    "deployment_id": "deploy-1048",
+    "level": "error",
+    "message": "Failed to apply migrations: relation users does not exist"
   }
 ]

@@ -14,7 +14,7 @@ def scenarios(fixture_directory: Path):
 def test_scenario_loading(fixture_directory: Path) -> None:
     loaded = scenarios(fixture_directory)
 
-    assert len(loaded) == 5
+    assert len(loaded) == 7
     assert loaded[0].id == "supported-health-check-timeout"
     assert loaded[0].expected_evidence_sources == ("deployment", "logs", "service_health")
 
@@ -30,14 +30,13 @@ def test_supported_diagnosis_evaluates_correctly(
     assert not result.actual_inconclusive
 
 
-def test_inconclusive_scenarios_evaluate_correctly(
+def test_remaining_scenarios_evaluate_correctly(
     fixture_directory: Path,
     investigator: DeploymentFailureInvestigator,
 ) -> None:
     results = run_evaluation(scenarios(fixture_directory)[1:], investigator)
 
     assert all(result.passed for result in results)
-    assert all(result.actual_inconclusive for result in results)
 
 
 def test_mismatched_expectation_is_detected(
@@ -68,5 +67,4 @@ def test_supplied_dataset_passes_and_prints_summary(
     print_report(results, output)
 
     assert all(result.passed for result in results)
-    assert output.getvalue().splitlines()[-1] == "Summary: 5 passed, 0 failed"
-
+    assert output.getvalue().splitlines()[-1] == "Summary: 7 passed, 0 failed"
