@@ -10,6 +10,23 @@
     "service": "inventory-api",
     "status": "failed",
     "failed_stage": "health_check"
+  },
+  {
+    "id": "deploy-1044",
+    "service": "payments-api",
+    "status": "failed",
+    "failed_stage": "health_check"
+  },
+  {
+    "id": "deploy-1045",
+    "service": "search-api",
+    "status": "failed",
+    "failed_stage": "health_check"
+  },
+  {
+    "id": "deploy-1046",
+    "service": "profile-api",
+    "status": "failed",
+    "failed_stage": "rollout"
   }
 ]
-

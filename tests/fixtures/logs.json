@@ -9,6 +9,17 @@
     "level": "error",
     "reason": "timeout",
     "message": "Health check timed out after 30 seconds."
+  },
+  {
+    "deployment_id": "deploy-1045",
+    "level": "error",
+    "reason": "timeout",
+    "message": "Health check timed out after 30 seconds."
+  },
+  {
+    "deployment_id": "deploy-1046",
+    "level": "error",
+    "reason": "permission_denied",
+    "message": "Rollout was denied by the deployment policy."
   }
 ]
-

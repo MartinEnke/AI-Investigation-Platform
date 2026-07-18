@@ -1,0 +1,38 @@
+[
+  {
+    "id": "supported-health-check-timeout",
+    "question": "Why did deployment deploy-1042 fail?",
+    "expected_root_cause": "The deployment health check timed out because the target service was unhealthy.",
+    "expected_inconclusive": false,
+    "expected_evidence_sources": ["deployment", "logs", "service_health"]
+  },
+  {
+    "id": "unknown-deployment",
+    "question": "Why did deployment deploy-9999 fail?",
+    "expected_root_cause": null,
+    "expected_inconclusive": true,
+    "expected_evidence_sources": []
+  },
+  {
+    "id": "missing-log-evidence",
+    "question": "Why did deployment deploy-1044 fail?",
+    "expected_root_cause": null,
+    "expected_inconclusive": true,
+    "expected_evidence_sources": ["deployment", "service_health"]
+  },
+  {
+    "id": "missing-service-health-evidence",
+    "question": "Why did deployment deploy-1045 fail?",
+    "expected_root_cause": null,
+    "expected_inconclusive": true,
+    "expected_evidence_sources": ["deployment", "logs"]
+  },
+  {
+    "id": "unsupported-complete-evidence",
+    "question": "Why did deployment deploy-1046 fail?",
+    "expected_root_cause": null,
+    "expected_inconclusive": true,
+    "expected_evidence_sources": ["deployment", "logs", "service_health"]
+  }
+]
+

@@ -3,6 +3,15 @@
     "service": "checkout-api",
     "status": "unhealthy",
     "detail": "Readiness endpoint returned HTTP 503."
+  },
+  {
+    "service": "payments-api",
+    "status": "unhealthy",
+    "detail": "Readiness endpoint returned HTTP 503."
+  },
+  {
+    "service": "profile-api",
+    "status": "healthy",
+    "detail": "Readiness endpoint returned HTTP 200."
   }
 ]
-

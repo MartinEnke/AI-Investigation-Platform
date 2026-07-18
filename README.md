@@ -26,5 +26,12 @@ Run all tests with:
 pytest
 ```
 
-The first milestone uses only read-only JSON fixtures and deterministic rules. It makes no network or model calls.
+Run the deterministic evaluation scenarios with:
 
+```bash
+python -m ai_investigation.evaluation.runner \
+  tests/fixtures/evaluation_scenarios.json \
+  --fixtures tests/fixtures
+```
+
+The first milestone uses only read-only JSON fixtures and deterministic rules. It makes no network or model calls.
