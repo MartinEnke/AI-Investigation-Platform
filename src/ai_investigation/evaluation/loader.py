@@ -5,6 +5,20 @@ from pathlib import Path
 
 from ai_investigation.evaluation.models import EvaluationScenario
 
+DIAGNOSIS_IDS = {
+    "health_check_timeout",
+    "missing_environment_variable",
+    "database_migration_failure",
+}
+EXECUTION_STATUSES = {
+    "completed",
+    "not_evaluated",
+    "invalid_response",
+    "invalid_references",
+    "refused",
+    "provider_failure",
+}
+
 
 def load_scenarios(path: Path) -> tuple[EvaluationScenario, ...]:
     with path.open(encoding="utf-8") as fixture:
@@ -32,6 +46,9 @@ def _parse_scenario(item: object, index: int, path: Path) -> EvaluationScenario:
     expected_limitations = item.get("expected_limitations")
     expected_decision_outcome = item.get("expected_decision_outcome")
     expected_matched_rule_ids = item.get("expected_matched_rule_ids")
+    expected_diagnosis_id = item.get("expected_diagnosis_id")
+    expected_should_abstain = item.get("expected_should_abstain")
+    expected_execution_status = item.get("expected_execution_status")
 
     if not isinstance(scenario_id, str) or not scenario_id:
         raise ValueError(f"Scenario {index} in {path} requires a non-empty string id")
@@ -66,6 +83,17 @@ def _parse_scenario(item: object, index: int, path: Path) -> EvaluationScenario:
         or not all(isinstance(rule_id, str) for rule_id in expected_matched_rule_ids)
     ):
         raise ValueError(f"Scenario {scenario_id} has invalid expected_matched_rule_ids")
+    if expected_diagnosis_id is not None and expected_diagnosis_id not in DIAGNOSIS_IDS:
+        raise ValueError(f"Scenario {scenario_id} has invalid expected_diagnosis_id")
+    if expected_should_abstain is not None and not isinstance(
+        expected_should_abstain, bool
+    ):
+        raise ValueError(f"Scenario {scenario_id} has invalid expected_should_abstain")
+    if (
+        expected_execution_status is not None
+        and expected_execution_status not in EXECUTION_STATUSES
+    ):
+        raise ValueError(f"Scenario {scenario_id} has invalid expected_execution_status")
 
     return EvaluationScenario(
         id=scenario_id,
@@ -85,4 +113,7 @@ def _parse_scenario(item: object, index: int, path: Path) -> EvaluationScenario:
             if expected_matched_rule_ids is not None
             else None
         ),
+        expected_diagnosis_id=expected_diagnosis_id,
+        expected_should_abstain=expected_should_abstain,
+        expected_execution_status=expected_execution_status,
     )

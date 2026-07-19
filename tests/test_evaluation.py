@@ -72,6 +72,39 @@ def test_valid_optional_limitations_are_parsed(tmp_path: Path) -> None:
     assert scenario.expected_limitations == ("First limitation.", "Second limitation.")
 
 
+def test_optional_experiment_expectations_are_parsed(tmp_path: Path) -> None:
+    scenario = load_scenarios(
+        write_scenario(
+            tmp_path / "scenarios.json",
+            expected_diagnosis_id="health_check_timeout",
+            expected_should_abstain=False,
+            expected_execution_status="provider_failure",
+        )
+    )[0]
+
+    assert scenario.expected_diagnosis_id == "health_check_timeout"
+    assert scenario.expected_should_abstain is False
+    assert scenario.expected_execution_status == "provider_failure"
+
+
+def test_scenario_without_experiment_expectations_remains_valid(tmp_path: Path) -> None:
+    scenario = load_scenarios(write_scenario(tmp_path / "scenarios.json"))[0]
+
+    assert scenario.expected_diagnosis_id is None
+    assert scenario.expected_should_abstain is None
+    assert scenario.expected_execution_status is None
+
+
+def test_invalid_experiment_execution_status_is_rejected(tmp_path: Path) -> None:
+    path = write_scenario(
+        tmp_path / "scenarios.json",
+        expected_execution_status="retried",
+    )
+
+    with pytest.raises(ValueError, match="invalid expected_execution_status"):
+        load_scenarios(path)
+
+
 @pytest.mark.parametrize("invalid_confidence", (True, "high", [0.25]))
 def test_invalid_confidence_type_is_rejected(
     tmp_path: Path,

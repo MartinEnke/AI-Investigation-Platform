@@ -4,6 +4,8 @@
     "question": "Why did deployment deploy-1042 fail?",
     "expected_root_cause": "The deployment health check timed out because the target service was unhealthy.",
     "expected_inconclusive": false,
+    "expected_diagnosis_id": "health_check_timeout",
+    "expected_should_abstain": false,
     "expected_evidence_sources": ["deployment", "logs", "service_health"],
     "expected_decision_outcome": "single_match",
     "expected_matched_rule_ids": ["health_check_timeout"]
@@ -13,6 +15,7 @@
     "question": "Why did deployment deploy-9999 fail?",
     "expected_root_cause": null,
     "expected_inconclusive": true,
+    "expected_should_abstain": true,
     "expected_evidence_sources": []
   },
   {
@@ -20,6 +23,7 @@
     "question": "Why did deployment deploy-1044 fail?",
     "expected_root_cause": null,
     "expected_inconclusive": true,
+    "expected_should_abstain": true,
     "expected_evidence_sources": ["deployment", "service_health"]
   },
   {
@@ -27,6 +31,7 @@
     "question": "Why did deployment deploy-1045 fail?",
     "expected_root_cause": null,
     "expected_inconclusive": true,
+    "expected_should_abstain": true,
     "expected_evidence_sources": ["deployment", "logs"]
   },
   {
@@ -34,6 +39,7 @@
     "question": "Why did deployment deploy-1046 fail?",
     "expected_root_cause": null,
     "expected_inconclusive": true,
+    "expected_should_abstain": true,
     "expected_evidence_sources": ["deployment", "logs", "service_health"],
     "expected_decision_outcome": "no_match",
     "expected_matched_rule_ids": []
@@ -43,6 +49,8 @@
     "question": "Why did deployment deploy-1047 fail?",
     "expected_root_cause": "The deployment failed because required environment variable DATABASE_URL was missing.",
     "expected_inconclusive": false,
+    "expected_diagnosis_id": "missing_environment_variable",
+    "expected_should_abstain": false,
     "expected_evidence_sources": ["deployment", "logs"]
   },
   {
@@ -50,6 +58,8 @@
     "question": "Why did deployment deploy-1048 fail?",
     "expected_root_cause": "The deployment failed because a database migration could not be applied.",
     "expected_inconclusive": false,
+    "expected_diagnosis_id": "database_migration_failure",
+    "expected_should_abstain": false,
     "expected_evidence_sources": ["deployment", "logs"]
   },
   {
@@ -57,6 +67,8 @@
     "question": "Why did deployment deploy-1049 fail?",
     "expected_root_cause": "The deployment failed because required environment variable DATABASE_URL was missing.",
     "expected_inconclusive": false,
+    "expected_diagnosis_id": "missing_environment_variable",
+    "expected_should_abstain": false,
     "expected_evidence_sources": ["deployment", "logs"]
   },
   {
@@ -64,6 +76,8 @@
     "question": "Why did deployment deploy-1050 fail?",
     "expected_root_cause": "The deployment failed because required environment variable DATABASE_URL was missing.",
     "expected_inconclusive": false,
+    "expected_diagnosis_id": "missing_environment_variable",
+    "expected_should_abstain": false,
     "expected_evidence_sources": ["deployment", "logs", "logs"]
   },
   {
@@ -71,6 +85,7 @@
     "question": "Why did deployment deploy-1051 fail?",
     "expected_root_cause": null,
     "expected_inconclusive": true,
+    "expected_should_abstain": true,
     "expected_evidence_sources": ["deployment", "logs"]
   },
   {
@@ -78,6 +93,7 @@
     "question": "Why did deployment deploy-1052 fail?",
     "expected_root_cause": null,
     "expected_inconclusive": true,
+    "expected_should_abstain": true,
     "expected_evidence_sources": ["deployment", "logs", "logs"],
     "expected_confidence": 0.25,
     "expected_limitations": [

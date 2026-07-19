@@ -1,0 +1,504 @@
+"""Reusable deterministic and model experiment evaluation over shared evidence."""
+
+from collections import Counter
+from collections.abc import Callable, Iterable
+from dataclasses import asdict, replace
+import json
+import time
+from typing import Literal
+
+from ai_investigation.evaluation.models import (
+    AggregateMetrics,
+    EvaluationReport,
+    EvaluationScenario,
+    ScenarioRunResult,
+)
+from ai_investigation.evidence import CollectedEvidence, EvidenceCollector
+from ai_investigation.investigator import DeploymentFailureInvestigator, request_from_question
+from ai_investigation.llm_investigator import (
+    LLMInvestigationFailure,
+    LLMInvestigationSuccess,
+    LLMInvestigator,
+    StructuredModel,
+)
+from ai_investigation.models import InvestigationResult
+
+InvestigatorMode = Literal["deterministic", "gemini", "both"]
+
+
+def run_experiment(
+    scenarios: Iterable[EvaluationScenario],
+    collector: EvidenceCollector,
+    deterministic_investigator: DeploymentFailureInvestigator,
+    *,
+    investigator_mode: InvestigatorMode = "deterministic",
+    structured_model: StructuredModel | None = None,
+    clock: Callable[[], float] = time.perf_counter,
+) -> EvaluationReport:
+    """Evaluate selected reasoning paths, sharing one evidence collection per scenario."""
+
+    if investigator_mode not in ("deterministic", "gemini", "both"):
+        raise ValueError(f"Unknown investigator mode: {investigator_mode}.")
+    if investigator_mode in ("gemini", "both") and structured_model is None:
+        raise ValueError("A structured model is required for Gemini evaluation.")
+
+    selected_scenarios = tuple(scenarios)
+    results: list[ScenarioRunResult] = []
+    llm_investigator = (
+        LLMInvestigator(structured_model)
+        if structured_model is not None and investigator_mode in ("gemini", "both")
+        else None
+    )
+
+    for scenario in selected_scenarios:
+        collected = collector.collect(request_from_question(scenario.question))
+        deterministic_result: ScenarioRunResult | None = None
+        model_result: ScenarioRunResult | None = None
+
+        if investigator_mode in ("deterministic", "both"):
+            started = clock()
+            investigation = deterministic_investigator.investigate_evidence(collected)
+            latency_ms = (clock() - started) * 1000
+            deterministic_result = _evaluate_deterministic(
+                scenario, collected, investigation, latency_ms
+            )
+
+        if investigator_mode in ("gemini", "both"):
+            assert llm_investigator is not None
+            started = clock()
+            outcome = llm_investigator.investigate(collected)
+            latency_ms = (clock() - started) * 1000
+            model_result = _evaluate_model(scenario, outcome, latency_ms)
+
+        if deterministic_result is not None and model_result is not None:
+            agreement = _agreement(deterministic_result, model_result)
+            deterministic_result = replace(
+                deterministic_result,
+                deterministic_model_agreement=agreement,
+            )
+            model_result = replace(
+                model_result,
+                deterministic_model_agreement=agreement,
+            )
+
+        if deterministic_result is not None:
+            results.append(deterministic_result)
+        if model_result is not None:
+            results.append(model_result)
+
+    collected_results = tuple(results)
+    return EvaluationReport(
+        investigator_mode=investigator_mode,
+        scenarios=collected_results,
+        aggregate=_aggregate(len(selected_scenarios), collected_results),
+    )
+
+
+def report_to_json(report: EvaluationReport) -> str:
+    """Serialize a report with deterministic keys and formatting."""
+
+    return json.dumps(asdict(report), indent=2, sort_keys=True) + "\n"
+
+
+def render_text_report(report: EvaluationReport) -> str:
+    """Render all aggregate and scenario dimensions without hiding failures."""
+
+    aggregate = report.aggregate
+    lines = [
+        "# AI Investigation Evaluation",
+        "",
+        f"Investigator: {report.investigator_mode}",
+        f"Scenarios: {aggregate.total_scenarios}",
+        "",
+        "## Summary",
+        "",
+    ]
+    if aggregate.diagnosis_cases:
+        lines.append(
+            _ratio("Diagnosis accuracy", aggregate.correct_diagnoses, aggregate.diagnosis_cases)
+        )
+    if aggregate.abstention_cases:
+        lines.append(
+            _ratio(
+                "Abstention accuracy",
+                aggregate.correct_abstentions,
+                aggregate.abstention_cases,
+            )
+        )
+    if aggregate.structured_responses_assessed:
+        lines.append(
+            _ratio(
+                "Structured-response validity",
+                aggregate.valid_structured_responses,
+                aggregate.structured_responses_assessed,
+            )
+        )
+    if aggregate.evidence_references_assessed:
+        lines.append(
+            _ratio(
+                "Evidence-reference validity",
+                aggregate.valid_evidence_references,
+                aggregate.evidence_references_assessed,
+            )
+        )
+    lines.extend(
+        (
+            f"Provider failures: {aggregate.provider_failures}",
+            f"Invalid responses: {aggregate.invalid_responses}",
+            f"Invalid references: {aggregate.invalid_references}",
+            f"Semantic failures: {aggregate.semantic_failures}",
+        )
+    )
+    if aggregate.average_latency_ms is not None:
+        lines.append(f"Average latency: {aggregate.average_latency_ms:.3f} ms")
+    if aggregate.agreement_cases:
+        lines.append(
+            _ratio(
+                "Deterministic/model agreement",
+                aggregate.investigator_agreements,
+                aggregate.agreement_cases,
+            )
+        )
+    if report.investigator_mode in ("gemini", "both"):
+        lines.extend((f"Confidence: {report.confidence_disclaimer}", ""))
+    else:
+        lines.append("")
+    lines.append("## Scenario Results")
+
+    for result in report.scenarios:
+        lines.extend(("", *_scenario_lines(result)))
+        if result.deterministic_model_agreement is not None:
+            lines.append(
+                "Investigators agree: "
+                + str(result.deterministic_model_agreement).lower()
+                + " (agreement is not correctness)"
+            )
+        if result.error is not None:
+            lines.append(f"Error: {result.error}")
+    return "\n".join(lines) + "\n"
+
+
+def _evaluate_deterministic(
+    scenario: EvaluationScenario,
+    collected: CollectedEvidence,
+    investigation: InvestigationResult,
+    latency_ms: float,
+) -> ScenarioRunResult:
+    diagnosis_id = _deterministic_diagnosis_id(investigation)
+    abstained = investigation.root_cause is None
+    references_valid = all(
+        any(item is collected_item for collected_item in collected.evidence)
+        for item in investigation.evidence
+    )
+    sources = tuple(item.source for item in investigation.evidence)
+    return _scenario_result(
+        scenario=scenario,
+        investigator="deterministic",
+        execution_status="completed",
+        actual_diagnosis_id=diagnosis_id,
+        actual_abstention=abstained,
+        evidence_references_valid=references_valid,
+        structured_response_valid=None,
+        referenced_sources=sources,
+        confidence=investigation.confidence,
+        latency_ms=latency_ms,
+        error=None,
+    )
+
+
+def _evaluate_model(
+    scenario: EvaluationScenario,
+    outcome: LLMInvestigationSuccess | LLMInvestigationFailure,
+    latency_ms: float,
+) -> ScenarioRunResult:
+    if isinstance(outcome, LLMInvestigationSuccess):
+        return _scenario_result(
+            scenario=scenario,
+            investigator="gemini",
+            execution_status="completed",
+            actual_diagnosis_id=outcome.decision.diagnosis_id,
+            actual_abstention=outcome.decision.outcome == "abstain",
+            evidence_references_valid=True,
+            structured_response_valid=True,
+            referenced_sources=tuple(item.source for item in outcome.result.evidence),
+            confidence=outcome.decision.confidence,
+            latency_ms=latency_ms,
+            error=None,
+        )
+
+    structured_valid = False if outcome.status == "invalid_response" else None
+    references_valid = False if outcome.status == "invalid_references" else None
+    if outcome.status == "invalid_references":
+        structured_valid = True
+    actual_abstention = True if outcome.status == "not_evaluated" else None
+    return _scenario_result(
+        scenario=scenario,
+        investigator="gemini",
+        execution_status=outcome.status,
+        actual_diagnosis_id=None,
+        actual_abstention=actual_abstention,
+        evidence_references_valid=references_valid,
+        structured_response_valid=structured_valid,
+        referenced_sources=(),
+        confidence=None,
+        latency_ms=latency_ms,
+        error="; ".join(outcome.errors),
+    )
+
+
+def _scenario_result(
+    *,
+    scenario: EvaluationScenario,
+    investigator: Literal["deterministic", "gemini"],
+    execution_status: str,
+    actual_diagnosis_id: str | None,
+    actual_abstention: bool | None,
+    evidence_references_valid: bool | None,
+    structured_response_valid: bool | None,
+    referenced_sources: tuple[str, ...],
+    confidence: float | None,
+    latency_ms: float,
+    error: str | None,
+) -> ScenarioRunResult:
+    expected_diagnosis = _expected_diagnosis_id(scenario)
+    expected_abstention = _expected_abstention(scenario)
+    diagnosis_correct = (
+        actual_diagnosis_id == expected_diagnosis
+        if expected_diagnosis is not None and actual_abstention is not None
+        else None
+    )
+    abstention_correct = actual_abstention == expected_abstention
+    if actual_abstention is None:
+        semantic_status = "not_evaluated"
+    elif expected_diagnosis is not None:
+        semantic_status = "correct" if diagnosis_correct else "incorrect"
+    else:
+        semantic_status = "correct" if abstention_correct else "incorrect"
+    missing, unexpected = _source_differences(
+        scenario.expected_evidence_sources,
+        referenced_sources,
+    )
+    semantic_correctness_status: Literal["correct", "incorrect", "not_evaluated"] = (
+        semantic_status
+    )
+    return ScenarioRunResult(
+        scenario_id=scenario.id,
+        investigator=investigator,
+        execution_status=execution_status,
+        expected_execution_status=scenario.expected_execution_status,
+        execution_status_matches=(
+            None
+            if scenario.expected_execution_status is None
+            else execution_status == scenario.expected_execution_status
+        ),
+        expected_diagnosis_id=expected_diagnosis,
+        actual_diagnosis_id=actual_diagnosis_id,
+        diagnosis_correct=diagnosis_correct,
+        expected_abstention=expected_abstention,
+        actual_abstention=actual_abstention,
+        abstention_correct=abstention_correct,
+        evidence_references_valid=evidence_references_valid,
+        structured_response_valid=structured_response_valid,
+        expected_sources=scenario.expected_evidence_sources,
+        referenced_sources=referenced_sources,
+        missing_sources=missing,
+        unexpected_sources=unexpected,
+        confidence=confidence,
+        latency_ms=latency_ms,
+        error=error,
+        semantic_correctness_status=semantic_correctness_status,
+    )
+
+
+def _expected_diagnosis_id(scenario: EvaluationScenario) -> str | None:
+    if scenario.expected_diagnosis_id is not None:
+        return scenario.expected_diagnosis_id
+    if scenario.expected_matched_rule_ids is not None and len(
+        scenario.expected_matched_rule_ids
+    ) == 1:
+        return scenario.expected_matched_rule_ids[0]
+    return None
+
+
+def _expected_abstention(scenario: EvaluationScenario) -> bool:
+    return (
+        scenario.expected_should_abstain
+        if scenario.expected_should_abstain is not None
+        else scenario.expected_inconclusive
+    )
+
+
+def _deterministic_diagnosis_id(result: InvestigationResult) -> str | None:
+    trace = result.decision_trace
+    if trace is not None and trace.outcome == "single_match" and len(trace.matched_rule_ids) == 1:
+        return trace.matched_rule_ids[0]
+    return None
+
+
+def _source_differences(
+    expected: tuple[str, ...], actual: tuple[str, ...]
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    missing_counts = Counter(expected) - Counter(actual)
+    unexpected_counts = Counter(actual) - Counter(expected)
+    missing = _ordered_counter_values(expected, missing_counts)
+    unexpected = _ordered_counter_values(actual, unexpected_counts)
+    return missing, unexpected
+
+
+def _ordered_counter_values(
+    values: tuple[str, ...], counts: Counter[str]
+) -> tuple[str, ...]:
+    selected: list[str] = []
+    for value in values:
+        if counts[value] > 0:
+            selected.append(value)
+            counts[value] -= 1
+    return tuple(selected)
+
+
+def _agreement(
+    deterministic: ScenarioRunResult,
+    model: ScenarioRunResult,
+) -> bool | None:
+    if model.execution_status != "completed" or model.actual_abstention is None:
+        return None
+    return (
+        deterministic.actual_diagnosis_id == model.actual_diagnosis_id
+        and deterministic.actual_abstention == model.actual_abstention
+    )
+
+
+def _aggregate(
+    total_scenarios: int,
+    results: tuple[ScenarioRunResult, ...],
+) -> AggregateMetrics:
+    diagnosis_results = tuple(
+        result for result in results if result.expected_diagnosis_id is not None
+    )
+    abstention_results = tuple(result for result in results if result.expected_abstention)
+    structured = tuple(
+        result for result in results if result.structured_response_valid is not None
+    )
+    references = tuple(
+        result for result in results if result.evidence_references_valid is not None
+    )
+    agreements = tuple(
+        result
+        for result in results
+        if result.investigator == "gemini"
+        and result.deterministic_model_agreement is not None
+    )
+    correct_confidence = tuple(
+        result.confidence
+        for result in results
+        if result.investigator == "gemini"
+        and result.semantic_correctness_status == "correct"
+        and result.confidence is not None
+    )
+    incorrect_confidence = tuple(
+        result.confidence
+        for result in results
+        if result.investigator == "gemini"
+        and result.semantic_correctness_status == "incorrect"
+        and result.confidence is not None
+    )
+    return AggregateMetrics(
+        total_scenarios=total_scenarios,
+        total_runs=len(results),
+        completed_runs=sum(result.execution_status == "completed" for result in results),
+        correct_diagnoses=sum(result.diagnosis_correct is True for result in diagnosis_results),
+        diagnosis_cases=len(diagnosis_results),
+        correct_abstentions=sum(result.abstention_correct for result in abstention_results),
+        abstention_cases=len(abstention_results),
+        valid_structured_responses=sum(
+            result.structured_response_valid is True for result in structured
+        ),
+        structured_responses_assessed=len(structured),
+        valid_evidence_references=sum(
+            result.evidence_references_valid is True for result in references
+        ),
+        evidence_references_assessed=len(references),
+        provider_failures=sum(result.execution_status == "provider_failure" for result in results),
+        invalid_responses=sum(result.execution_status == "invalid_response" for result in results),
+        invalid_references=sum(
+            result.execution_status == "invalid_references" for result in results
+        ),
+        semantic_failures=sum(
+            result.semantic_correctness_status == "incorrect" for result in results
+        ),
+        average_latency_ms=_average(tuple(result.latency_ms for result in results)),
+        investigator_agreements=sum(
+            result.deterministic_model_agreement is True for result in agreements
+        ),
+        agreement_cases=len(agreements),
+        average_confidence_correct=_average(correct_confidence),
+        average_confidence_incorrect=_average(incorrect_confidence),
+    )
+
+
+def _average(values: tuple[float, ...]) -> float | None:
+    return sum(values) / len(values) if values else None
+
+
+def _ratio(label: str, numerator: int, denominator: int) -> str:
+    return f"{label}: {numerator}/{denominator}" if denominator else f"{label}: not applicable"
+
+
+def _actual_outcome_label(result: ScenarioRunResult) -> str:
+    if result.actual_diagnosis_id is not None:
+        return f"diagnosis: {result.actual_diagnosis_id}"
+    if result.actual_abstention is True:
+        return "abstention"
+    return "no valid outcome"
+
+
+def _scenario_lines(result: ScenarioRunResult) -> list[str]:
+    lines = [
+        f"### {result.scenario_id} [{result.investigator}]",
+        f"Execution status: {result.execution_status}",
+    ]
+    if result.expected_execution_status is not None:
+        lines.extend(
+            (
+                f"Expected execution status: {result.expected_execution_status}",
+                "Execution status matches: "
+                + str(result.execution_status_matches).lower(),
+            )
+        )
+    lines.extend(
+        (
+            f"Semantic correctness: {result.semantic_correctness_status}",
+            "Expected outcome: "
+            + (
+                f"diagnosis: {result.expected_diagnosis_id}"
+                if result.expected_diagnosis_id is not None
+                else "abstention"
+            ),
+            f"Actual outcome: {_actual_outcome_label(result)}",
+        )
+    )
+    if result.expected_abstention or result.actual_abstention is True:
+        lines.append(
+            "Abstention assessment: "
+            + ("correct" if result.abstention_correct else "incorrect")
+        )
+    if result.evidence_references_valid is not None:
+        lines.append(
+            "Evidence references: "
+            + ("valid" if result.evidence_references_valid else "invalid")
+        )
+    if result.structured_response_valid is not None:
+        lines.append(
+            "Structured response: "
+            + ("valid" if result.structured_response_valid else "invalid")
+        )
+    if result.referenced_sources:
+        lines.append(f"Referenced sources: {', '.join(result.referenced_sources)}")
+    if result.missing_sources:
+        lines.append(f"Missing sources: {', '.join(result.missing_sources)}")
+    if result.unexpected_sources:
+        lines.append(f"Unexpected sources: {', '.join(result.unexpected_sources)}")
+    if result.confidence is not None:
+        lines.append(f"Confidence: {result.confidence:.2f}")
+    lines.append(f"Latency: {result.latency_ms:.3f} ms")
+    return lines

@@ -1,9 +1,9 @@
 # AI Investigation Platform
 
 ![Python 3.13+](https://img.shields.io/badge/Python-3.13%2B-3776AB)
-![Tests](https://img.shields.io/badge/tests-86%20passing-2E8B57)
+![Tests](https://img.shields.io/badge/tests-111%20passing-2E8B57)
 ![Evaluation scenarios](https://img.shields.io/badge/evaluations-11%20passing-2E8B57)
-![Milestone 6](https://img.shields.io/badge/milestone-6-6C63FF)
+![Milestone 7](https://img.shields.io/badge/milestone-7-6C63FF)
 ![Architecture](https://img.shields.io/badge/architecture-deterministic--first-555555)
 
 Exploring how reliable AI systems are engineered—through deterministic evidence collection, explicit evaluation, progressive orchestration, and explainable investigations.
@@ -33,8 +33,8 @@ That makes this domain a useful miniature of a broader AI system.
 
 ## Current Implementation
 
-Milestone 6 preserves the complete deterministic investigation pipeline and adds a controlled,
-opt-in Gemini interpretation of the same collected evidence.
+Milestone 7 preserves both investigation paths and adds a reusable experimentation framework for
+measuring their behavior without changing how they investigate.
 
 It currently includes:
 
@@ -52,7 +52,8 @@ It currently includes:
 - strict structured LLM parsing and evidence-reference validation;
 - an isolated `gemini-2.5-flash` adapter;
 - a command-line interface;
-- 95 passing tests;
+- structured scenario results, aggregate metrics, and text or JSON evaluation reports;
+- 111 passing tests;
 - 11 passing synthetic evaluation scenarios.
 
 The supported diagnosis rules are intentionally narrow:
@@ -131,9 +132,11 @@ Rules compute each predicate once. The same boolean facts determine the match an
 
 This structure supports reproducibility, auditing, direct tests, and eventual comparison with a probabilistic investigator. It does not duplicate the public answer, expose raw logs as metadata, or generate free-form internal reasoning.
 
-## Evaluation Framework
+## Experimentation and Evaluation
 
-The repository includes a dedicated deterministic evaluation runner in addition to unit tests. Its purpose is to protect system behavior across architectural changes.
+The repository includes a reusable evaluation framework in addition to unit tests. Its purpose is
+to protect deterministic behavior and measure probabilistic behavior across the same controlled
+scenarios.
 
 > The question is not only whether the code runs, but whether the system still behaves as intended
 > after architectural changes.
@@ -149,14 +152,43 @@ The 11 controlled synthetic scenarios cover:
 - conflicting supported patterns;
 - stable ordered evidence sources across multiple logs.
 
-The evaluation schema always compares root cause, conclusive status, and ordered evidence sources. Scenarios may also opt into exact checks for:
+Each scenario declares a stable expected diagnosis category or abstention. Every run records
+execution status, semantic correctness, abstention behavior, evidence-source coverage, structural
+and reference validity where applicable, confidence, errors, and local monotonic-clock latency.
+Reports retain these individual dimensions instead of reducing them to one score.
+
+```text
+Benchmark Scenario
+        │
+        v
+EvidenceCollector
+        │
+        v
+CollectedEvidence
+        │
+        v
+Investigator ──> Validation ──> Evaluation
+                                      │
+                                      v
+                               Scenario Result
+                                      │
+                                      v
+                               Aggregate Report
+```
+
+The original regression schema still compares root cause, conclusive status, and ordered evidence
+sources. Scenarios may also opt into exact checks for:
 
 - confidence;
 - ordered limitations;
 - decision outcome;
 - ordered matched-rule identifiers.
 
-Optional expectations keep older scenarios valid while allowing important cases—especially conflicts—to make stronger assertions. Together, the scenarios form a regression baseline for measuring any future probabilistic component against the existing deterministic system.
+Optional expectations keep older scenarios valid while allowing important cases—especially
+conflicts—to make stronger assertions. Semantic correctness is evaluated deterministically from
+stable diagnosis IDs; no model judges another model. Agreement is reported independently because
+two investigators can agree and still be wrong. Model confidence is self-reported and
+uncalibrated.
 
 Milestone 6 used that baseline for one unchanged `gemini-2.5-flash` comparison run. The complete
 scenario-level results and limitations are preserved in the
@@ -261,15 +293,26 @@ Limitations are empty for this supported diagnosis. Inconclusive results render 
 ├── AGENTS.md
 ├── README.md
 ├── pyproject.toml
+├── docs/
+│   ├── architecture/
+│   │   └── milestone-06-deterministic-vs-llm.md
+│   └── experiments/
+│       ├── milestone-06-gemini-benchmark.md
+│       └── milestone-7-deterministic-baseline.md
 ├── src/
 │   └── ai_investigation/
 │       ├── __init__.py
 │       ├── cli.py
 │       ├── diagnosis.py
+│       ├── evaluate.py
+│       ├── evidence.py
+│       ├── gemini_model.py
 │       ├── investigator.py
+│       ├── llm_investigator.py
 │       ├── models.py
 │       ├── evaluation/
 │       │   ├── __init__.py
+│       │   ├── framework.py
 │       │   ├── loader.py
 │       │   ├── models.py
 │       │   └── runner.py
@@ -281,9 +324,14 @@ Limitations are empty for this supported diagnosis. Inconclusive results render 
 │           └── service_health.py
 └── tests/
     ├── conftest.py
+    ├── test_cli.py
     ├── test_diagnosis.py
     ├── test_evaluation.py
+    ├── test_evidence.py
+    ├── test_experiment_evaluation.py
+    ├── test_gemini_model.py
     ├── test_investigator.py
+    ├── test_llm_investigator.py
     ├── test_tools.py
     └── fixtures/
         ├── deployments.json
@@ -362,6 +410,34 @@ python -m ai_investigation.evaluation.runner \
   tests/fixtures/evaluation_scenarios.json \
   --fixtures tests/fixtures
 ```
+
+Run the Milestone 7 deterministic evaluation with a human-readable report:
+
+```bash
+python -m ai_investigation.evaluate --investigator deterministic --format text
+```
+
+Write a stable machine-readable report:
+
+```bash
+python -m ai_investigation.evaluate \
+  --investigator deterministic \
+  --format json \
+  --output reports/deterministic-baseline.json
+```
+
+An explicitly selected `both` run shares one evidence collection per scenario:
+
+```bash
+GEMINI_API_KEY="your-api-key" python -m ai_investigation.evaluate \
+  --investigator both \
+  --format text
+```
+
+The safe default is deterministic and never constructs Gemini. Gemini and `both` evaluations are
+opt-in real-provider experiments; automated tests inject fake models and make no provider calls.
+The initial deterministic result is documented in the
+[Milestone 7 baseline report](docs/experiments/milestone-7-deterministic-baseline.md).
 
 ## Possible Architectural Evolution
 
