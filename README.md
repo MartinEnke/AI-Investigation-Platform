@@ -52,7 +52,7 @@ It currently includes:
 - strict structured LLM parsing and evidence-reference validation;
 - an isolated `gemini-2.5-flash` adapter;
 - a command-line interface;
-- 86 passing tests;
+- 95 passing tests;
 - 11 passing synthetic evaluation scenarios.
 
 The supported diagnosis rules are intentionally narrow:
@@ -207,19 +207,38 @@ Question:
 Why did deployment deploy-1042 fail?
 ```
 
-Actual CLI output:
+Deterministic CLI output:
 
 ```text
-Deployment deploy-1042 failed during its health check. The deployment health check timed out because the target service was unhealthy.
-Root cause: The deployment health check timed out because the target service was unhealthy.
-Confidence: 100%
-Evidence:
-  1. [deployment] deploy-1042 has status failed and failed stage health_check.
-  2. [logs] Health check timed out after 30 seconds.
-  3. [service_health] checkout-api was unhealthy: Readiness endpoint returned HTTP 503.
+Investigation
+-------------
+Question: Why did deployment deploy-1042 fail?
+Investigator: deterministic
+
+Collected Evidence
+------------------
+1. [deployment] deploy-1042 has status failed and failed stage health_check.
+2. [logs] Health check timed out after 30 seconds.
+3. [service_health] checkout-api was unhealthy: Readiness endpoint returned HTTP 503.
+
+Deterministic Conclusion
+------------------------
+Answer: Deployment deploy-1042 failed during its health check. The deployment health check timed out because the target service was unhealthy.
+Diagnosis: The deployment health check timed out because the target service was unhealthy.
+Confidence: 1.00
+Decision outcome: single_match
+Matched rules: health_check_timeout
+
+Deterministic Evidence References
+---------------------------------
+1, 2, 3
+
+Deterministic Validation
+------------------------
+Deterministic rule evaluation completed.
 ```
 
-The CLI intentionally renders the concise investigation result, not the full decision trace. The same investigation exposes this trace programmatically:
+The CLI also renders the ordered rule and condition evaluations. The same trace remains available programmatically:
 
 ```text
 outcome: single_match
@@ -288,6 +307,47 @@ Run an investigation:
 ```bash
 python -m ai_investigation.cli "Why did deployment deploy-1042 fail?"
 ```
+
+## Run an Interactive Investigation
+
+Select the deterministic path directly:
+
+```bash
+python -m ai_investigation.cli \
+  --investigator deterministic \
+  "Why did deployment deploy-1042 fail?"
+```
+
+For Gemini, install the optional experiment dependency and provide the API key through the
+existing environment convention:
+
+```bash
+python -m pip install -e ".[experiment]"
+export GEMINI_API_KEY="your-api-key"
+python -m ai_investigation.cli \
+  --investigator gemini \
+  "Why did deployment deploy-1042 fail?"
+```
+
+Run both reasoning paths over one shared collection of evidence:
+
+```bash
+python -m ai_investigation.cli \
+  --investigator both \
+  "Why did deployment deploy-1042 fail?"
+```
+
+Omit the question to choose an investigator and enter a question interactively:
+
+```bash
+python -m ai_investigation.cli
+```
+
+The current tools read synthetic local fixtures. In `both` mode, the deterministic and Gemini
+paths receive the exact same `CollectedEvidence`; the model does not call tools itself. A
+structurally valid response and valid evidence references do not establish semantic correctness,
+and model-reported confidence is currently uncalibrated. Provider, parsing, and reference-validation
+failures are displayed without automatic retries.
 
 Run all tests:
 
