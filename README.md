@@ -1,9 +1,9 @@
 # AI Investigation Platform
 
 ![Python 3.13+](https://img.shields.io/badge/Python-3.13%2B-3776AB)
-![Tests](https://img.shields.io/badge/tests-53%20passing-2E8B57)
+![Tests](https://img.shields.io/badge/tests-86%20passing-2E8B57)
 ![Evaluation scenarios](https://img.shields.io/badge/evaluations-11%20passing-2E8B57)
-![Milestone 5](https://img.shields.io/badge/milestone-5-6C63FF)
+![Milestone 6](https://img.shields.io/badge/milestone-6-6C63FF)
 ![Architecture](https://img.shields.io/badge/architecture-deterministic--first-555555)
 
 Exploring how reliable AI systems are engineered—through deterministic evidence collection, explicit evaluation, progressive orchestration, and explainable investigations.
@@ -33,7 +33,8 @@ That makes this domain a useful miniature of a broader AI system.
 
 ## Current Implementation
 
-Milestone 5 provides a complete deterministic deployment-failure investigation pipeline.
+Milestone 6 preserves the complete deterministic investigation pipeline and adds a controlled,
+opt-in Gemini interpretation of the same collected evidence.
 
 It currently includes:
 
@@ -47,8 +48,11 @@ It currently includes:
 - explicit conflict abstention when multiple rules match;
 - deterministic confidence and ordered limitations;
 - an immutable, machine-readable decision trace;
+- shared deterministic evidence collection for both reasoning paths;
+- strict structured LLM parsing and evidence-reference validation;
+- an isolated `gemini-2.5-flash` adapter;
 - a command-line interface;
-- 53 passing tests;
+- 86 passing tests;
 - 11 passing synthetic evaluation scenarios.
 
 The supported diagnosis rules are intentionally narrow:
@@ -57,23 +61,32 @@ The supported diagnosis rules are intentionally narrow:
 2. Missing required environment variable
 3. Database migration failure
 
-The system makes no network calls and no LLM calls. There are no agents, graph frameworks, external services, or probabilistic scores hidden behind the deterministic behavior.
+The deterministic CLI, tests, and evaluation make no network or model calls. Real Gemini execution
+is optional and credential-gated. There are no agents, graph frameworks, retries, provider routing,
+or hidden probabilistic fallbacks.
 
 ## Architecture
 
-The design keeps evidence access, diagnosis, trace construction, and public presentation separate enough to test each responsibility directly.
+The design keeps evidence access, interpretation, trace construction, validation, and public
+presentation separate enough to test each responsibility directly.
 
 ```text
 CLI
  │
  v
-Investigator ──> Evidence Collection
+Evidence Collection ──> CollectedEvidence
                        ├──> Deployment Tool
                        ├──> Log Tool
                        └──> Service Health Tool
- │
- v
-Deterministic Diagnosis ──> Decision Trace ──> Investigation Result
+                            │
+              ┌─────────────┴─────────────┐
+              v                           v
+Deterministic Diagnosis             Gemini Interpretation
+       │                                  │
+       v                                  v
+Decision Trace                    Parsing + Reference Validation
+       │                                  │
+       └──────────────> Investigation Result
 ```
 
 The tool layer exposes small protocols rather than binding investigation logic to JSON files. The current adapters are local and read-only; diagnosis rules depend only on their evidence context.
@@ -144,6 +157,10 @@ The evaluation schema always compares root cause, conclusive status, and ordered
 - ordered matched-rule identifiers.
 
 Optional expectations keep older scenarios valid while allowing important cases—especially conflicts—to make stronger assertions. Together, the scenarios form a regression baseline for measuring any future probabilistic component against the existing deterministic system.
+
+Milestone 6 used that baseline for one unchanged `gemini-2.5-flash` comparison run. The complete
+scenario-level results and limitations are preserved in the
+[Milestone 6 benchmark report](docs/experiments/milestone-06-gemini-benchmark.md).
 
 ## Engineering Principles
 
@@ -302,9 +319,11 @@ Completed
         │
         v
   structured deterministic decision trace
+        │
+        v
+  controlled Gemini baseline comparison
 
 Possible directions
-  ├── controlled LLM baseline comparison
   ├── probabilistic investigation beside the deterministic baseline
   ├── graph orchestration if branching complexity justifies it
   ├── external evidence integrations
@@ -323,7 +342,8 @@ The project currently:
 - covers a deliberately small deployment-failure domain;
 - supports three deterministic diagnosis patterns;
 - has no production evidence integrations;
-- has no probabilistic AI component;
+- has one experimental Gemini adapter rather than a production probabilistic investigator;
+- has no retry, fallback, or semantic-validation policy for model output;
 - does not measure performance against real incident data.
 
 These constraints are intentional. They keep the baseline inspectable and make its claims honest. The evaluation suite measures behavior on its declared synthetic scenarios, not general incident-diagnosis accuracy.
