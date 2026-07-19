@@ -30,6 +30,14 @@ class GeminiStructuredModel:
         self._model = model
         self._client = client if client is not None else _create_client(api_key)
 
+    @property
+    def provider_name(self) -> str:
+        return "google-gemini"
+
+    @property
+    def model_name(self) -> str:
+        return self._model
+
     def generate(self, prompt: str) -> str:
         try:
             response = self._client.models.generate_content(  # type: ignore[attr-defined]

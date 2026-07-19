@@ -192,7 +192,7 @@ def test_agreement_is_recorded_separately_from_correctness(
 
 def test_latency_is_measured_with_a_monotonic_clock(fixture_directory: Path) -> None:
     collector, investigator = dependencies(fixture_directory)
-    times = iter((10.0, 10.005))
+    times = iter((10.0, 10.0, 10.0, 10.001, 10.002, 10.007, 10.008, 10.009, 10.010, 10.011))
 
     result = run_experiment(
         (scenarios(fixture_directory)[0],),
@@ -247,6 +247,19 @@ def test_text_report_describes_abstention_as_an_outcome(
     assert "Actual outcome: abstention" in rendered
     assert "Abstention assessment: correct" in rendered
     assert "Expected diagnosis: abstain" not in rendered
+
+
+def test_text_report_deduplicates_source_categories_only(
+    fixture_directory: Path,
+) -> None:
+    collector, investigator = dependencies(fixture_directory)
+    report = run_experiment((scenarios(fixture_directory)[8],), collector, investigator)
+
+    rendered = render_text_report(report)
+
+    assert "Referenced sources: deployment, logs" in rendered
+    assert "Referenced sources: deployment, logs, logs" not in rendered
+    assert report.scenarios[0].referenced_sources == ("deployment", "logs", "logs")
 
 
 def test_evaluation_cli_writes_json_and_does_not_construct_gemini(

@@ -70,6 +70,14 @@ LLM_RESPONSE_JSON_SCHEMA = {
 
 
 class StructuredModel(Protocol):
+    @property
+    def provider_name(self) -> str:
+        """Stable provider identifier for experiment metadata."""
+
+    @property
+    def model_name(self) -> str:
+        """Stable model identifier for experiment metadata."""
+
     def generate(self, prompt: str) -> str:
         """Return one raw structured response for the supplied prompt."""
 

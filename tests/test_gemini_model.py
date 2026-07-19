@@ -57,6 +57,8 @@ def test_gemini_request_uses_model_and_provider_independent_schema() -> None:
     result = adapter.generate("investigate this evidence")
 
     assert result == '{"outcome":"abstain"}'
+    assert adapter.provider_name == "google-gemini"
+    assert adapter.model_name == "gemini-2.5-flash"
     assert models.calls == [
         {
             "model": "gemini-2.5-flash",

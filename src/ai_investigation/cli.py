@@ -241,6 +241,16 @@ def _gemini_model() -> StructuredModel:
 class _LazyGeminiModel:
     """Construct Gemini only if the LLM investigator requests generation."""
 
+    @property
+    def provider_name(self) -> str:
+        return "google-gemini"
+
+    @property
+    def model_name(self) -> str:
+        from ai_investigation.gemini_model import DEFAULT_GEMINI_MODEL
+
+        return os.environ.get("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
+
     def generate(self, prompt: str) -> str:
         return _gemini_model().generate(prompt)
 

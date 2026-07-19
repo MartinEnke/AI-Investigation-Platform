@@ -24,6 +24,10 @@ from ai_investigation.llm_investigator import (
 from ai_investigation.models import InvestigationResult
 
 InvestigatorMode = Literal["deterministic", "gemini", "both"]
+EventObserver = Callable[
+    [str, str | None, str | None, str, str, float | None, tuple[tuple[str, str], ...]],
+    None,
+]
 
 
 def run_experiment(
@@ -34,6 +38,7 @@ def run_experiment(
     investigator_mode: InvestigatorMode = "deterministic",
     structured_model: StructuredModel | None = None,
     clock: Callable[[], float] = time.perf_counter,
+    observer: EventObserver | None = None,
 ) -> EvaluationReport:
     """Evaluate selected reasoning paths, sharing one evidence collection per scenario."""
 
@@ -43,6 +48,8 @@ def run_experiment(
         raise ValueError("A structured model is required for Gemini evaluation.")
 
     selected_scenarios = tuple(scenarios)
+    experiment_started = clock()
+    _emit(observer, "experiment_started", None, None, "experiment", "started")
     results: list[ScenarioRunResult] = []
     llm_investigator = (
         LLMInvestigator(structured_model)
@@ -51,24 +58,116 @@ def run_experiment(
     )
 
     for scenario in selected_scenarios:
+        scenario_started = clock()
+        _emit(observer, "scenario_started", scenario.id, None, "scenario", "started")
+        _emit(
+            observer,
+            "evidence_collection_started",
+            scenario.id,
+            None,
+            "evidence_collection",
+            "started",
+        )
+        evidence_started = clock()
         collected = collector.collect(request_from_question(scenario.question))
+        evidence_duration = (clock() - evidence_started) * 1000
+        _emit(
+            observer,
+            "evidence_collection_completed",
+            scenario.id,
+            None,
+            "evidence_collection",
+            "completed",
+            evidence_duration,
+        )
         deterministic_result: ScenarioRunResult | None = None
         model_result: ScenarioRunResult | None = None
 
         if investigator_mode in ("deterministic", "both"):
+            _emit(
+                observer,
+                "deterministic_investigation_started",
+                scenario.id,
+                "deterministic",
+                "investigation",
+                "started",
+            )
             started = clock()
             investigation = deterministic_investigator.investigate_evidence(collected)
             latency_ms = (clock() - started) * 1000
+            _emit(
+                observer,
+                "deterministic_investigation_completed",
+                scenario.id,
+                "deterministic",
+                "investigation",
+                "completed",
+                latency_ms,
+            )
+            evaluation_started = clock()
             deterministic_result = _evaluate_deterministic(
                 scenario, collected, investigation, latency_ms
+            )
+            evaluation_duration = (clock() - evaluation_started) * 1000
+            _emit(
+                observer,
+                "scenario_evaluated",
+                scenario.id,
+                "deterministic",
+                "evaluation",
+                deterministic_result.semantic_correctness_status,
+                evaluation_duration,
             )
 
         if investigator_mode in ("gemini", "both"):
             assert llm_investigator is not None
+            _emit(
+                observer,
+                "model_investigation_started",
+                scenario.id,
+                "gemini",
+                "investigation",
+                "started",
+            )
             started = clock()
             outcome = llm_investigator.investigate(collected)
             latency_ms = (clock() - started) * 1000
+            outcome_status = "completed" if isinstance(outcome, LLMInvestigationSuccess) else outcome.status
+            _emit(
+                observer,
+                "model_investigation_completed",
+                scenario.id,
+                "gemini",
+                "investigation",
+                outcome_status,
+                latency_ms,
+            )
+            _emit(
+                observer,
+                "validation_completed",
+                scenario.id,
+                "gemini",
+                "validation",
+                outcome_status,
+            )
+            evaluation_started = clock()
             model_result = _evaluate_model(scenario, outcome, latency_ms)
+            evaluation_duration = (clock() - evaluation_started) * 1000
+            event_type = (
+                "scenario_failed"
+                if model_result.execution_status not in ("completed", "not_evaluated")
+                else "scenario_evaluated"
+            )
+            _emit(
+                observer,
+                event_type,
+                scenario.id,
+                "gemini",
+                "evaluation",
+                model_result.semantic_correctness_status,
+                evaluation_duration,
+                (("execution_status", model_result.execution_status),),
+            )
 
         if deterministic_result is not None and model_result is not None:
             agreement = _agreement(deterministic_result, model_result)
@@ -85,13 +184,54 @@ def run_experiment(
             results.append(deterministic_result)
         if model_result is not None:
             results.append(model_result)
+        _emit(
+            observer,
+            "scenario_completed",
+            scenario.id,
+            None,
+            "scenario",
+            "completed",
+            (clock() - scenario_started) * 1000,
+        )
 
     collected_results = tuple(results)
-    return EvaluationReport(
+    report = EvaluationReport(
         investigator_mode=investigator_mode,
         scenarios=collected_results,
         aggregate=_aggregate(len(selected_scenarios), collected_results),
     )
+    _emit(
+        observer,
+        "experiment_completed",
+        None,
+        None,
+        "experiment",
+        "completed",
+        (clock() - experiment_started) * 1000,
+    )
+    return report
+
+
+def _emit(
+    observer: EventObserver | None,
+    event_type: str,
+    scenario_id: str | None,
+    investigator: str | None,
+    stage: str,
+    status: str,
+    duration_ms: float | None = None,
+    details: tuple[tuple[str, str], ...] = (),
+) -> None:
+    if observer is not None:
+        observer(
+            event_type,
+            scenario_id,
+            investigator,
+            stage,
+            status,
+            duration_ms,
+            details,
+        )
 
 
 def report_to_json(report: EvaluationReport) -> str:
@@ -493,7 +633,9 @@ def _scenario_lines(result: ScenarioRunResult) -> list[str]:
             + ("valid" if result.structured_response_valid else "invalid")
         )
     if result.referenced_sources:
-        lines.append(f"Referenced sources: {', '.join(result.referenced_sources)}")
+        lines.append(
+            f"Referenced sources: {', '.join(_ordered_unique(result.referenced_sources))}"
+        )
     if result.missing_sources:
         lines.append(f"Missing sources: {', '.join(result.missing_sources)}")
     if result.unexpected_sources:
@@ -502,3 +644,7 @@ def _scenario_lines(result: ScenarioRunResult) -> list[str]:
         lines.append(f"Confidence: {result.confidence:.2f}")
     lines.append(f"Latency: {result.latency_ms:.3f} ms")
     return lines
+
+
+def _ordered_unique(values: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(values))

@@ -1,9 +1,9 @@
 # AI Investigation Platform
 
 ![Python 3.13+](https://img.shields.io/badge/Python-3.13%2B-3776AB)
-![Tests](https://img.shields.io/badge/tests-111%20passing-2E8B57)
+![Tests](https://img.shields.io/badge/tests-122%20passing-2E8B57)
 ![Evaluation scenarios](https://img.shields.io/badge/evaluations-11%20passing-2E8B57)
-![Milestone 7](https://img.shields.io/badge/milestone-7-6C63FF)
+![Milestone 8](https://img.shields.io/badge/milestone-8-6C63FF)
 ![Architecture](https://img.shields.io/badge/architecture-deterministic--first-555555)
 
 Exploring how reliable AI systems are engineered—through deterministic evidence collection, explicit evaluation, progressive orchestration, and explainable investigations.
@@ -33,8 +33,8 @@ That makes this domain a useful miniature of a broader AI system.
 
 ## Current Implementation
 
-Milestone 7 preserves both investigation paths and adds a reusable experimentation framework for
-measuring their behavior without changing how they investigate.
+Milestone 8 preserves both investigation paths and adds optional local experiment tracking around
+the reusable evaluation framework.
 
 It currently includes:
 
@@ -53,7 +53,8 @@ It currently includes:
 - an isolated `gemini-2.5-flash` adapter;
 - a command-line interface;
 - structured scenario results, aggregate metrics, and text or JSON evaluation reports;
-- 111 passing tests;
+- local experiment metadata, stage events, timing, persistence, inspection, and comparison;
+- 122 passing tests;
 - 11 passing synthetic evaluation scenarios.
 
 The supported diagnosis rules are intentionally narrow:
@@ -194,6 +195,52 @@ Milestone 6 used that baseline for one unchanged `gemini-2.5-flash` comparison r
 scenario-level results and limitations are preserved in the
 [Milestone 6 benchmark report](docs/experiments/milestone-06-gemini-benchmark.md).
 
+## Local Experiment Tracking
+
+Evaluation answers whether behavior met expectations. Observability records how that evaluation
+was executed: its configuration, stage lifecycle, timing, provider outcome, and stored artifacts.
+Milestone 8 keeps those concerns local and optional.
+
+```text
+Evaluation Configuration
+        │
+        v
+Experiment Run Context
+        │
+        v
+Scenario Execution
+        ├── Evidence Collection
+        ├── Investigation
+        ├── Validation
+        └── Evaluation
+        │
+        v
+Structured Events ──> Experiment Record ──> Local Experiment Store
+                                                │
+                                                v
+                                        List / Inspect / Compare
+```
+
+A saved run creates:
+
+```text
+experiments/runs/<experiment-id>/
+├── experiment.json
+├── report.txt
+└── events.jsonl
+```
+
+`experiment.json` composes the existing evaluation report with reproducibility metadata and a
+timing summary. `events.jsonl` contains small sequenced lifecycle events; it does not persist API
+keys, prompts, raw provider responses, or complete evidence payloads. Generated run directories
+are ignored by Git.
+
+Durations use a monotonic clock. Evidence collection, deterministic interpretation, model
+interpretation, evaluation, scenario total, and experiment total are measured around existing
+boundaries. Model parsing and reference validation currently occur within the LLM investigator,
+so their lifecycle is recorded but their duration is not presented as a separately measurable
+value.
+
 ## Engineering Principles
 
 - Evidence before conclusions
@@ -298,13 +345,15 @@ Limitations are empty for this supported diagnosis. Inconclusive results render 
 │   │   └── milestone-06-deterministic-vs-llm.md
 │   └── experiments/
 │       ├── milestone-06-gemini-benchmark.md
-│       └── milestone-7-deterministic-baseline.md
+│       ├── milestone-7-deterministic-baseline.md
+│       └── milestone-8-local-observability.md
 ├── src/
 │   └── ai_investigation/
 │       ├── __init__.py
 │       ├── cli.py
 │       ├── diagnosis.py
 │       ├── evaluate.py
+│       ├── experiments.py
 │       ├── evidence.py
 │       ├── gemini_model.py
 │       ├── investigator.py
@@ -315,7 +364,8 @@ Limitations are empty for this supported diagnosis. Inconclusive results render 
 │       │   ├── framework.py
 │       │   ├── loader.py
 │       │   ├── models.py
-│       │   └── runner.py
+│       │   ├── runner.py
+│       │   └── tracking.py
 │       └── tools/
 │           ├── __init__.py
 │           ├── deployments.py
@@ -329,6 +379,7 @@ Limitations are empty for this supported diagnosis. Inconclusive results render 
     ├── test_evaluation.py
     ├── test_evidence.py
     ├── test_experiment_evaluation.py
+    ├── test_experiment_tracking.py
     ├── test_gemini_model.py
     ├── test_investigator.py
     ├── test_llm_investigator.py
@@ -439,6 +490,29 @@ opt-in real-provider experiments; automated tests inject fake models and make no
 The initial deterministic result is documented in the
 [Milestone 7 baseline report](docs/experiments/milestone-7-deterministic-baseline.md).
 
+Save a deterministic experiment locally:
+
+```bash
+python -m ai_investigation.evaluate \
+  --investigator deterministic \
+  --save-experiment \
+  --tag baseline \
+  --notes "Milestone 8 deterministic baseline"
+```
+
+Inspect experiment history:
+
+```bash
+python -m ai_investigation.experiments list
+python -m ai_investigation.experiments show <experiment-id>
+python -m ai_investigation.experiments compare <before-id> <after-id>
+```
+
+Comparison keeps correctness, agreement, validation, provider failures, latency, regressions, and
+improvements separate. Metrics without compatible denominators are reported as not comparable.
+External observability platforms remain deferred until local tracking demonstrates a concrete
+need. See the [Milestone 8 observability note](docs/experiments/milestone-8-local-observability.md).
+
 ## Possible Architectural Evolution
 
 The roadmap is problem-driven, not framework-driven.
@@ -458,6 +532,9 @@ Completed
         │
         v
   controlled Gemini baseline comparison
+        │
+        v
+  local experiment tracking and execution observability
 
 Possible directions
   ├── probabilistic investigation beside the deterministic baseline
