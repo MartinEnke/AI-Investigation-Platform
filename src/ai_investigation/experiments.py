@@ -5,12 +5,16 @@ from pathlib import Path
 import sys
 from typing import Sequence
 
+from ai_investigation.evaluation.comparison import (
+    ScenarioChange,
+    compare_experiments,
+    comparison_to_json,
+    render_comparison,
+)
 from ai_investigation.evaluation.tracking import (
     ExperimentPersistenceError,
-    compare_experiments,
     list_experiments,
     load_experiment,
-    render_comparison,
 )
 
 
@@ -29,6 +33,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     compare = commands.add_parser("compare")
     compare.add_argument("before")
     compare.add_argument("after")
+    compare.add_argument("--json", action="store_true")
+    compare.add_argument("--fail-on-regression", action="store_true")
     args = parser.parse_args(argv)
 
     if args.command == "list":
@@ -63,7 +69,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             before = load_experiment(_resolve(args.before, args.experiment_dir))
             after = load_experiment(_resolve(args.after, args.experiment_dir))
-            print(render_comparison(compare_experiments(before, after)), end="")
+            comparison = compare_experiments(before, after)
+            rendered = (
+                comparison_to_json(comparison)
+                if args.json
+                else render_comparison(comparison)
+            )
+            print(rendered, end="")
+            if args.fail_on_regression and any(
+                scenario.change is ScenarioChange.REGRESSED
+                for scenario in comparison.scenarios
+            ):
+                return 1
     except ExperimentPersistenceError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2

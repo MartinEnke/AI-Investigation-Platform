@@ -268,16 +268,16 @@ def test_comparison_handles_metrics_regressions_and_scenario_sets(
 
     comparison = compare_experiments(before, after)
 
-    assert "supported-health-check-timeout:deterministic" in comparison.regressions
-    assert "unknown-deployment:deterministic" in comparison.only_before
+    assert "supported-health-check-timeout" in comparison.regressions
+    assert "unknown-deployment" in comparison.only_before
     assert any(
         metric.metric == "structured_response_validity" and not metric.comparable
         for metric in comparison.metrics
     )
     assert "not comparable" in render_comparison(comparison)
     reverse = compare_experiments(after, before)
-    assert "supported-health-check-timeout:deterministic" in reverse.improvements
-    assert "unknown-deployment:deterministic" in reverse.only_after
+    assert "supported-health-check-timeout" in reverse.improvements
+    assert "unknown-deployment" in reverse.only_after
 
 
 def test_provider_failure_produces_trackable_events(fixture_directory: Path) -> None:

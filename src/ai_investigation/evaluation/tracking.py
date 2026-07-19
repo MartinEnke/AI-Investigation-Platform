@@ -17,6 +17,12 @@ from ai_investigation.evaluation.models import (
     EvaluationReport,
     ScenarioRunResult,
 )
+from ai_investigation.evaluation.comparison import (
+    ComparisonReport as ExperimentComparison,
+    MetricDelta as MetricComparison,
+    compare_experiments,
+    render_comparison,
+)
 
 EXPERIMENT_SCHEMA_VERSION = 1
 EVENT_TYPES = {
@@ -94,26 +100,6 @@ class ExperimentRecord:
     report: EvaluationReport
     timing: TimingSummary
     events: tuple[ExecutionEvent, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class MetricComparison:
-    metric: str
-    before: float | None
-    after: float | None
-    delta: float | None
-    comparable: bool
-
-
-@dataclass(frozen=True, slots=True)
-class ExperimentComparison:
-    before_experiment_id: str
-    after_experiment_id: str
-    metrics: tuple[MetricComparison, ...]
-    regressions: tuple[str, ...]
-    improvements: tuple[str, ...]
-    only_before: tuple[str, ...]
-    only_after: tuple[str, ...]
 
 
 class ExperimentPersistenceError(Exception):
@@ -273,67 +259,6 @@ def list_experiments(root: Path) -> tuple[tuple[ExperimentRecord, ...], tuple[st
     return tuple(records), tuple(errors)
 
 
-def compare_experiments(
-    before: ExperimentRecord,
-    after: ExperimentRecord,
-) -> ExperimentComparison:
-    metrics = tuple(
-        _compare_metric(name, _metric(before.report.aggregate, name), _metric(after.report.aggregate, name))
-        for name in (
-            "diagnosis_accuracy",
-            "abstention_accuracy",
-            "evidence_reference_validity",
-            "structured_response_validity",
-            "provider_failures",
-            "semantic_failures",
-            "average_latency_ms",
-            "agreement_rate",
-        )
-    )
-    before_status = _scenario_statuses(before.report)
-    after_status = _scenario_statuses(after.report)
-    shared = before_status.keys() & after_status.keys()
-    return ExperimentComparison(
-        before_experiment_id=before.metadata.experiment_id,
-        after_experiment_id=after.metadata.experiment_id,
-        metrics=metrics,
-        regressions=tuple(sorted(item for item in shared if before_status[item] and not after_status[item])),
-        improvements=tuple(sorted(item for item in shared if not before_status[item] and after_status[item])),
-        only_before=tuple(sorted(before_status.keys() - after_status.keys())),
-        only_after=tuple(sorted(after_status.keys() - before_status.keys())),
-    )
-
-
-def render_comparison(comparison: ExperimentComparison) -> str:
-    lines = [
-        "# Experiment Comparison",
-        "",
-        f"Before: {comparison.before_experiment_id}",
-        f"After: {comparison.after_experiment_id}",
-        "",
-        "## Metrics",
-    ]
-    for metric in comparison.metrics:
-        if not metric.comparable:
-            lines.append(f"{metric.metric}: not comparable")
-        else:
-            lines.append(
-                f"{metric.metric}: {metric.before:.4f} -> {metric.after:.4f} "
-                f"(delta {metric.delta:+.4f})"
-            )
-    lines.extend(
-        (
-            "",
-            "## Scenarios",
-            f"Regressions: {', '.join(comparison.regressions) or 'none'}",
-            f"Improvements: {', '.join(comparison.improvements) or 'none'}",
-            f"Only before: {', '.join(comparison.only_before) or 'none'}",
-            f"Only after: {', '.join(comparison.only_after) or 'none'}",
-        )
-    )
-    return "\n".join(lines) + "\n"
-
-
 def resolve_git_revision(cwd: Path | None = None) -> str | None:
     try:
         result = subprocess.run(
@@ -443,46 +368,3 @@ def _record_from_dict(value: object) -> ExperimentRecord:
         timing=TimingSummary(**timing_value),
         events=events,
     )
-
-
-def _metric(aggregate: AggregateMetrics, name: str) -> float | None:
-    if name == "diagnosis_accuracy":
-        return _rate(aggregate.correct_diagnoses, aggregate.diagnosis_cases)
-    if name == "abstention_accuracy":
-        return _rate(aggregate.correct_abstentions, aggregate.abstention_cases)
-    if name == "evidence_reference_validity":
-        return _rate(aggregate.valid_evidence_references, aggregate.evidence_references_assessed)
-    if name == "structured_response_validity":
-        return _rate(aggregate.valid_structured_responses, aggregate.structured_responses_assessed)
-    if name == "agreement_rate":
-        return _rate(aggregate.investigator_agreements, aggregate.agreement_cases)
-    if name == "provider_failures":
-        return float(aggregate.provider_failures)
-    if name == "semantic_failures":
-        return float(aggregate.semantic_failures)
-    return aggregate.average_latency_ms
-
-
-def _rate(numerator: int, denominator: int) -> float | None:
-    return numerator / denominator if denominator else None
-
-
-def _compare_metric(name: str, before: float | None, after: float | None) -> MetricComparison:
-    comparable = before is not None and after is not None
-    return MetricComparison(
-        metric=name,
-        before=before,
-        after=after,
-        delta=after - before if comparable else None,
-        comparable=comparable,
-    )
-
-
-def _scenario_statuses(report: EvaluationReport) -> dict[str, bool]:
-    return {
-        f"{result.scenario_id}:{result.investigator}": (
-            result.semantic_correctness_status == "correct"
-            and result.execution_status in ("completed", "not_evaluated")
-        )
-        for result in report.scenarios
-    }

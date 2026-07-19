@@ -1,9 +1,9 @@
 # AI Investigation Platform
 
 ![Python 3.13+](https://img.shields.io/badge/Python-3.13%2B-3776AB)
-![Tests](https://img.shields.io/badge/tests-122%20passing-2E8B57)
+![Tests](https://img.shields.io/badge/tests-141%20passing-2E8B57)
 ![Evaluation scenarios](https://img.shields.io/badge/evaluations-11%20passing-2E8B57)
-![Milestone 8](https://img.shields.io/badge/milestone-8-6C63FF)
+![Milestone 9](https://img.shields.io/badge/milestone-9-6C63FF)
 ![Architecture](https://img.shields.io/badge/architecture-deterministic--first-555555)
 
 Exploring how reliable AI systems are engineered—through deterministic evidence collection, explicit evaluation, progressive orchestration, and explainable investigations.
@@ -33,8 +33,8 @@ That makes this domain a useful miniature of a broader AI system.
 
 ## Current Implementation
 
-Milestone 8 preserves both investigation paths and adds optional local experiment tracking around
-the reusable evaluation framework.
+Milestone 9 evolves local experiment tracking into scenario-level comparative evaluation and an
+automation-ready semantic regression gate.
 
 It currently includes:
 
@@ -54,7 +54,8 @@ It currently includes:
 - a command-line interface;
 - structured scenario results, aggregate metrics, and text or JSON evaluation reports;
 - local experiment metadata, stage events, timing, persistence, inspection, and comparison;
-- 122 passing tests;
+- typed scenario changes, failure categories, multidimensional deltas, and recommendations;
+- 141 passing tests;
 - 11 passing synthetic evaluation scenarios.
 
 The supported diagnosis rules are intentionally narrow:
@@ -241,6 +242,24 @@ boundaries. Model parsing and reference validation currently occur within the LL
 so their lifecycle is recorded but their duration is not presented as a separately measurable
 value.
 
+## Scenario-Level Regression Analysis
+
+Aggregate accuracy cannot reveal which behavior changed. Two experiments can both score 10/11
+while fixing one scenario and breaking another. Milestone 9 therefore matches stored results by
+stable scenario ID and classifies each shared case as improved, regressed, unchanged correct,
+unchanged incorrect, or not comparable.
+
+Comparison preserves semantic correctness, abstention behavior, structural and evidence-reference
+validity, execution status, investigator agreement, and latency as separate dimensions. Agreement
+never substitutes for correctness. One deterministic primary failure category distinguishes wrong
+diagnoses, failed or unnecessary abstention, provider failures, invalid responses, invalid
+references, and other structural failures.
+
+The recommendation policy is deliberately narrow: any semantic scenario regression produces a
+warning, and improvements never cancel regressions. Optional dimensions and latency remain visible
+trade-offs rather than arbitrary acceptance weights. The regression gate exits with status `1`
+only for semantic regressions; missing or malformed experiments remain distinct errors.
+
 ## Engineering Principles
 
 - Evidence before conclusions
@@ -346,7 +365,8 @@ Limitations are empty for this supported diagnosis. Inconclusive results render 
 │   └── experiments/
 │       ├── milestone-06-gemini-benchmark.md
 │       ├── milestone-7-deterministic-baseline.md
-│       └── milestone-8-local-observability.md
+│       ├── milestone-8-local-observability.md
+│       └── milestone-9-scenario-regression-analysis.md
 ├── src/
 │   └── ai_investigation/
 │       ├── __init__.py
@@ -361,6 +381,7 @@ Limitations are empty for this supported diagnosis. Inconclusive results render 
 │       ├── models.py
 │       ├── evaluation/
 │       │   ├── __init__.py
+│       │   ├── comparison.py
 │       │   ├── framework.py
 │       │   ├── loader.py
 │       │   ├── models.py
@@ -374,6 +395,7 @@ Limitations are empty for this supported diagnosis. Inconclusive results render 
 │           └── service_health.py
 └── tests/
     ├── conftest.py
+    ├── test_comparison.py
     ├── test_cli.py
     ├── test_diagnosis.py
     ├── test_evaluation.py
@@ -508,10 +530,24 @@ python -m ai_investigation.experiments show <experiment-id>
 python -m ai_investigation.experiments compare <before-id> <after-id>
 ```
 
+Machine-readable comparison and the semantic regression gate use the same typed comparison model:
+
+```bash
+python -m ai_investigation.experiments compare \
+  <baseline-id> <candidate-id> \
+  --json
+
+python -m ai_investigation.experiments compare \
+  <baseline-id> <candidate-id> \
+  --fail-on-regression
+```
+
 Comparison keeps correctness, agreement, validation, provider failures, latency, regressions, and
 improvements separate. Metrics without compatible denominators are reported as not comparable.
 External observability platforms remain deferred until local tracking demonstrates a concrete
 need. See the [Milestone 8 observability note](docs/experiments/milestone-8-local-observability.md).
+The comparison policy and failure precedence are documented in the
+[Milestone 9 engineering note](docs/experiments/milestone-9-scenario-regression-analysis.md).
 
 ## Possible Architectural Evolution
 
@@ -535,6 +571,9 @@ Completed
         │
         v
   local experiment tracking and execution observability
+        │
+        v
+  scenario-level comparison and semantic regression gate
 
 Possible directions
   ├── probabilistic investigation beside the deterministic baseline
