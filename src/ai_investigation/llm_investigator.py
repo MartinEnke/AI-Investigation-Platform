@@ -20,6 +20,7 @@ AbstentionReason = Literal[
     "conflicting_evidence",
     "low_confidence",
 ]
+PromptVersion = Literal["v1", "v2", "v3"]
 
 DIAGNOSIS_IDS = (
     "health_check_timeout",
@@ -28,7 +29,11 @@ DIAGNOSIS_IDS = (
     "missing_database_configuration",
     "database_contention_blocked_migration",
 )
-PROMPT_VERSION = "llm-investigator-v1"
+PROMPT_VERSION_V1 = "llm-investigator-v1"
+PROMPT_VERSION_V2 = "llm-investigator-v2"
+PROMPT_VERSION_V3 = "llm-investigator-v3"
+PROMPT_VERSION = PROMPT_VERSION_V1
+DEFAULT_PROMPT_VERSION: PromptVersion = "v1"
 RESPONSE_SCHEMA_VERSION = "llm-decision-v1"
 ABSTENTION_REASONS = (
     "insufficient_evidence",
@@ -135,17 +140,111 @@ class LLMInvestigationFailure:
 LLMInvestigationOutcome = LLMInvestigationSuccess | LLMInvestigationFailure
 
 
-def build_prompt(collected: CollectedEvidence) -> str:
+def build_prompt(
+    collected: CollectedEvidence,
+    prompt_version: PromptVersion = DEFAULT_PROMPT_VERSION,
+) -> str:
     """Serialize the complete collected input and ordered evidence references."""
+
+    if prompt_version == "v1":
+        return _build_prompt_v1(collected)
+    if prompt_version == "v2":
+        return _build_prompt_v2(collected)
+    if prompt_version == "v3":
+        return _build_prompt_v3(collected)
+    raise ValueError(f"Unsupported prompt version: {prompt_version}.")
+
+
+def prompt_version_identifier(prompt_version: PromptVersion) -> str:
+    """Return the stable experiment identifier for a validated prompt version."""
+
+    if prompt_version == "v1":
+        return PROMPT_VERSION_V1
+    if prompt_version == "v2":
+        return PROMPT_VERSION_V2
+    if prompt_version == "v3":
+        return PROMPT_VERSION_V3
+    raise ValueError(f"Unsupported prompt version: {prompt_version}.")
+
+
+def _build_prompt_v1(collected: CollectedEvidence) -> str:
+    """Preserve the original Milestone 10 prompt and evidence representation."""
 
     payload = serialize_evidence(collected)
     return (
-        f"Prompt version: {PROMPT_VERSION}. Interpret only the supplied deployment evidence. "
+        f"Prompt version: {PROMPT_VERSION_V1}. Interpret only the supplied deployment evidence. "
         "Do not invent or request additional evidence. Never use external assumptions. "
         "Choose one supported diagnosis only when the supplied evidence supports it; otherwise "
         "abstain when evidence is insufficient, contradictory, or unsupported. Cite exact numbered "
         "evidence references. Confidence represents uncertainty and must be between 0.0 and 1.0. "
         "Return only the requested JSON object; do not provide hidden reasoning.\n\n"
+        "Supported diagnosis IDs: health_check_timeout, missing_environment_variable, "
+        "database_migration_failure, missing_database_configuration, "
+        "database_contention_blocked_migration.\n"
+        "Abstention reasons: insufficient_evidence, conflicting_evidence, low_confidence.\n"
+        f"Response schema version: {RESPONSE_SCHEMA_VERSION}.\n"
+        "Response JSON schema:\n"
+        f"{json.dumps(LLM_RESPONSE_JSON_SCHEMA, sort_keys=True, separators=(',', ':'))}\n\n"
+        f"Collected evidence:\n{json.dumps(payload, sort_keys=True, separators=(',', ':'))}"
+    )
+
+
+def _build_prompt_v2(collected: CollectedEvidence) -> str:
+    payload = serialize_evidence_v2(collected)
+    valid_ids = [item["id"] for item in payload["evidence"]]
+    return (
+        f"Prompt version: {PROMPT_VERSION_V2}. Derive conclusions only from the supplied evidence. "
+        f"The only valid evidence IDs are {valid_ids}; use these exact integer IDs in "
+        "evidence_references and never invent an evidence ID. Include only evidence IDs that "
+        "directly support the diagnosis. Abstain when evidence is incomplete, conflicting, "
+        "unsupported, or leaves multiple diagnoses equally plausible. Abstain for generic errors "
+        "that do not establish a supported root cause. Prefer abstention over guessing. "
+        "Distinguish missing_environment_variable from missing_database_configuration. A "
+        "database-related error is insufficient for missing_database_configuration unless the "
+        "evidence specifically supports missing or invalid database configuration. Confidence "
+        "represents uncertainty and must be between 0.0 and 1.0. Return only the requested JSON "
+        "object; do not provide hidden reasoning.\n\n"
+        "Supported diagnosis IDs: health_check_timeout, missing_environment_variable, "
+        "database_migration_failure, missing_database_configuration, "
+        "database_contention_blocked_migration.\n"
+        "Abstention reasons: insufficient_evidence, conflicting_evidence, low_confidence.\n"
+        f"Response schema version: {RESPONSE_SCHEMA_VERSION}.\n"
+        "Response JSON schema:\n"
+        f"{json.dumps(LLM_RESPONSE_JSON_SCHEMA, sort_keys=True, separators=(',', ':'))}\n\n"
+        f"Collected evidence:\n{json.dumps(payload, sort_keys=True, separators=(',', ':'))}"
+    )
+
+
+def _build_prompt_v3(collected: CollectedEvidence) -> str:
+    payload = serialize_evidence_v2(collected)
+    valid_ids = [item["id"] for item in payload["evidence"]]
+    return (
+        f"Prompt version: {PROMPT_VERSION_V3}. Derive conclusions only from the supplied evidence. "
+        f"The only valid evidence IDs are {valid_ids}; return only these exact integer IDs and "
+        "never invent missing evidence. Evidence references are part of the validity contract, not "
+        "optional explanatory citations. Every diagnosis must reference the deployment evidence "
+        "that identifies and contextualizes the investigated deployment, plus all log evidence "
+        "necessary to establish the claimed cause. Reference service-health evidence whenever a "
+        "diagnosis depends on health-check state, timeout behavior, readiness, liveness, or service "
+        "availability. Do not return a diagnosis when a required evidence source is missing. "
+        "Abstentions should reference relevant conflicting or insufficient evidence when "
+        "appropriate, but must not invent missing evidence.\n\n"
+        "Diagnosis boundaries: A generic database error does not establish "
+        "database_migration_failure. Diagnose database_migration_failure only when evidence "
+        "explicitly connects the failure to migration execution, migration application, schema "
+        "migration, or an equivalent migration operation. A timeout symptom does not establish "
+        "health_check_timeout. Diagnose health_check_timeout only when evidence directly connects "
+        "the timeout to a deployment health check, readiness check, liveness check, or equivalent "
+        "health-check mechanism. Never choose the closest supported diagnosis merely because "
+        "symptoms overlap; similarity is not sufficient causal evidence. Abstain when evidence is "
+        "incomplete, conflicting, unsupported, or supports multiple incompatible causes. If the "
+        "available cause is outside the supported diagnosis set, abstain instead of mapping it to "
+        "the nearest label. Prefer abstention over guessing. Distinguish "
+        "missing_environment_variable from missing_database_configuration; a database-related "
+        "error is insufficient for missing_database_configuration unless evidence specifically "
+        "supports missing or invalid database configuration. Confidence represents uncertainty "
+        "and must be between 0.0 and 1.0. Return only the requested JSON object; do not provide "
+        "hidden reasoning.\n\n"
         "Supported diagnosis IDs: health_check_timeout, missing_environment_variable, "
         "database_migration_failure, missing_database_configuration, "
         "database_contention_blocked_migration.\n"
@@ -177,6 +276,66 @@ def serialize_evidence(collected: CollectedEvidence) -> dict[str, object]:
         "collection_limitations": list(collected.limitations),
     }
     return payload
+
+
+def serialize_evidence_v2(collected: CollectedEvidence) -> dict[str, object]:
+    """Present self-contained, numbered evidence to the LLM without changing domain evidence."""
+
+    items: list[dict[str, object]] = []
+    if collected.deployment is not None:
+        items.append(
+            _llm_evidence_item(
+                len(items) + 1,
+                "deployment",
+                "deployment",
+                collected.evidence[len(items)].summary,
+                collected.deployment,
+            )
+        )
+    for log in collected.error_logs:
+        items.append(
+            _llm_evidence_item(
+                len(items) + 1,
+                "error_log",
+                "logs",
+                collected.evidence[len(items)].summary,
+                log,
+            )
+        )
+    if collected.service_health is not None:
+        items.append(
+            _llm_evidence_item(
+                len(items) + 1,
+                "service_health",
+                "service_health",
+                collected.evidence[len(items)].summary,
+                collected.service_health,
+            )
+        )
+    return {
+        "request": {
+            "question": collected.request.question,
+            "deployment_id": collected.request.deployment_id,
+        },
+        "evidence": items,
+        "collection_limitations": list(collected.limitations),
+    }
+
+
+def _llm_evidence_item(
+    evidence_id: int,
+    evidence_type: str,
+    source: str,
+    observation: str,
+    content: object,
+) -> dict[str, object]:
+    return {
+        "id": evidence_id,
+        "type": evidence_type,
+        "source": source,
+        "observation": observation,
+        "content": dict(content),
+    }
 
 
 def parse_decision(raw_response: str) -> LLMDecision:
@@ -274,8 +433,14 @@ def validate_evidence_references(
 class LLMInvestigator:
     """Interpret pre-collected evidence through one structured model call."""
 
-    def __init__(self, model: StructuredModel) -> None:
+    def __init__(
+        self,
+        model: StructuredModel,
+        prompt_version: PromptVersion = DEFAULT_PROMPT_VERSION,
+    ) -> None:
         self._model = model
+        prompt_version_identifier(prompt_version)
+        self._prompt_version = prompt_version
 
     def investigate(self, collected: CollectedEvidence) -> LLMInvestigationOutcome:
         if collected.request.deployment_id is None:
@@ -290,7 +455,9 @@ class LLMInvestigator:
             )
 
         try:
-            raw_response = self._model.generate(build_prompt(collected))
+            raw_response = self._model.generate(
+                build_prompt(collected, self._prompt_version)
+            )
         except ModelRefusalError as error:
             return LLMInvestigationFailure("refused", (str(error) or "Model refused.",))
         except ModelProviderError as error:

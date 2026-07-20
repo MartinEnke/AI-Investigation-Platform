@@ -21,7 +21,9 @@ from ai_investigation.investigators import (
     LLMInvestigatorAdapter,
 )
 from ai_investigation.llm_investigator import (
+    DEFAULT_PROMPT_VERSION,
     LLMInvestigator,
+    PromptVersion,
     StructuredModel,
 )
 from ai_investigation.models import InvestigationResult
@@ -40,6 +42,7 @@ def run_experiment(
     *,
     investigator_mode: InvestigatorMode = "deterministic",
     structured_model: StructuredModel | None = None,
+    prompt_version: PromptVersion = DEFAULT_PROMPT_VERSION,
     clock: Callable[[], float] = time.perf_counter,
     observer: EventObserver | None = None,
 ) -> EvaluationReport:
@@ -55,8 +58,19 @@ def run_experiment(
     _emit(observer, "experiment_started", None, None, "experiment", "started")
     results: list[ScenarioRunResult] = []
     deterministic_adapter = DeterministicInvestigatorAdapter(deterministic_investigator)
+    provider_investigator = (
+        LLMInvestigator(structured_model)
+        if structured_model is not None and prompt_version == DEFAULT_PROMPT_VERSION
+        else LLMInvestigator(structured_model, prompt_version)
+        if structured_model is not None
+        else None
+    )
     llm_investigator = (
-        LLMInvestigatorAdapter(structured_model, LLMInvestigator(structured_model))
+        LLMInvestigatorAdapter(
+            structured_model,
+            provider_investigator,
+            prompt_version,
+        )
         if structured_model is not None and investigator_mode in ("gemini", "llm", "both")
         else None
     )

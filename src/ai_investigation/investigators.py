@@ -9,8 +9,10 @@ from ai_investigation.llm_investigator import (
     LLMInvestigationFailure,
     LLMInvestigationSuccess,
     LLMInvestigator,
-    PROMPT_VERSION,
+    DEFAULT_PROMPT_VERSION,
+    PromptVersion,
     StructuredModel,
+    prompt_version_identifier,
 )
 from ai_investigation.models import InvestigationResult
 
@@ -74,9 +76,11 @@ class LLMInvestigatorAdapter:
         self,
         model: StructuredModel,
         investigator: LLMInvestigator | None = None,
+        prompt_version: PromptVersion = DEFAULT_PROMPT_VERSION,
     ) -> None:
         self._model = model
-        self._investigator = investigator or LLMInvestigator(model)
+        self._investigator = investigator or LLMInvestigator(model, prompt_version)
+        self._prompt_version = prompt_version
 
     @property
     def identity(self) -> InvestigatorIdentity:
@@ -84,7 +88,7 @@ class LLMInvestigatorAdapter:
             mode="llm",
             provider=self._model.provider_name,
             model=self._model.model_name,
-            prompt_version=PROMPT_VERSION,
+            prompt_version=prompt_version_identifier(self._prompt_version),
         )
 
     def investigate(self, collected: CollectedEvidence) -> InvestigatorExecution:

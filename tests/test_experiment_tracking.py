@@ -371,6 +371,8 @@ def test_evaluation_cli_saves_fake_model_experiment(
         [
             "--investigator",
             "gemini",
+            "--prompt-version",
+            "v3",
             "--save-experiment",
             "--experiment-dir",
             str(root),
@@ -388,6 +390,8 @@ def test_evaluation_cli_saves_fake_model_experiment(
     record = load_experiment(stored[0])
     assert record.metadata.provider == "fake-provider"
     assert record.metadata.model == "fake-model-v1"
+    assert record.metadata.prompt_version == "llm-investigator-v3"
+    assert ("prompt_version", "v3") in record.metadata.configuration
     assert "Experiment ID:" in capsys.readouterr().out
 
 

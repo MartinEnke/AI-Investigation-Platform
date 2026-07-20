@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -204,3 +205,61 @@ def test_evaluation_cli_rejects_invalid_investigator() -> None:
         evaluate_cli.main(["--investigator", "unknown"])
 
     assert error.value.code == 2
+
+
+@pytest.mark.parametrize(
+    ("extra_arguments", "environment_provider", "expected_model"),
+    (
+        ([], "groq", "environment-model"),
+        (["--model", "cli-model"], "groq", "cli-model"),
+        (["--provider", "groq"], "unsupported-provider", "environment-model"),
+    ),
+)
+def test_evaluation_cli_loads_dotenv_defaults_with_cli_override(
+    fixture_directory: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    extra_arguments: list[str],
+    environment_provider: str,
+    expected_model: str,
+) -> None:
+    source = json.loads(
+        (fixture_directory / "evaluation_scenarios.json").read_text(encoding="utf-8")
+    )
+    scenario_path = tmp_path / "scenario.json"
+    scenario_path.write_text(json.dumps(source[:1]), encoding="utf-8")
+    (tmp_path / ".env").write_text(
+        "GROQ_API_KEY=dotenv-secret\n"
+        f"AI_INVESTIGATION_PROVIDER={environment_provider}\n"
+        "AI_INVESTIGATION_MODEL=environment-model\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    for name in (
+        "GROQ_API_KEY",
+        "AI_INVESTIGATION_PROVIDER",
+        "AI_INVESTIGATION_MODEL",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    selected: list[tuple[str | None, str | None, str | None]] = []
+
+    def fake_groq_model(model_name=None, provider_name=None):
+        selected.append((model_name, provider_name, os.environ.get("GROQ_API_KEY")))
+        return FakeProvider([_decision()])
+
+    monkeypatch.setattr(evaluate_cli, "_groq_model", fake_groq_model)
+
+    exit_code = evaluate_cli.main(
+        [
+            "--investigator",
+            "llm",
+            "--scenarios",
+            str(scenario_path),
+            "--fixtures",
+            str(fixture_directory),
+            *extra_arguments,
+        ]
+    )
+
+    assert exit_code == 0
+    assert selected == [(expected_model, "groq", "dotenv-secret")]

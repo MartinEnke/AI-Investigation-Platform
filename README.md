@@ -1,9 +1,9 @@
 # AI Investigation Platform
 
 ![Python 3.13+](https://img.shields.io/badge/Python-3.13%2B-3776AB)
-![Tests](https://img.shields.io/badge/tests-166%20passing-2E8B57)
+![Tests](https://img.shields.io/badge/tests-178%20passing-2E8B57)
 ![Evaluation scenarios](https://img.shields.io/badge/evaluations-16%20scenarios-2E8B57)
-![Milestone 10](https://img.shields.io/badge/milestone-10-6C63FF)
+![Milestone 10.1](https://img.shields.io/badge/milestone-10.1-6C63FF)
 ![Architecture](https://img.shields.io/badge/architecture-deterministic--first-555555)
 
 Exploring how reliable AI systems are engineered—through deterministic evidence collection, explicit evaluation, progressive orchestration, and explainable investigations.
@@ -58,7 +58,7 @@ It currently includes:
 - structured scenario results, aggregate metrics, and text or JSON evaluation reports;
 - local experiment metadata, stage events, timing, persistence, inspection, and comparison;
 - typed scenario changes, failure categories, multidimensional deltas, and recommendations;
-- 166 passing tests (plus one opt-in provider test skipped by default);
+- 178 passing tests (plus one opt-in provider test skipped by default);
 - 11 established regression scenarios and 5 Milestone 10 generalization scenarios.
 
 The supported diagnosis rules are intentionally narrow:
@@ -211,17 +211,103 @@ Both implementations satisfy one application-facing contract over the same immut
 supported decision IDs, and response schema. It never receives benchmark expectations,
 deterministic output, or comparison results.
 
-The prompt is pure, deterministic, and identified as `llm-investigator-v1`. Structured output is
-validated again in application code even when a provider offers JSON constraints. Unknown
+Milestone 10.1 begins with explicit prompt versions. `llm-investigator-v1` preserves the
+Milestone 10 behavior and remains the default. `llm-investigator-v2` presents each evidence item as
+a self-contained record with its exact existing numeric ID, type, source, observation, and factual
+content, then applies stricter grounding and abstention instructions. Structured output is validated
+again in application code even when a provider offers JSON constraints. Unknown
 diagnoses, contradictory fields, invalid confidence, malformed JSON, and nonexistent references
 remain explicit failures. No retries are used because raw provider reliability is itself an
 experimental result.
+
+This first 10.1 experiment changes no architecture, provider adapter, deterministic rule, benchmark
+case, or evaluation policy. Few-shot examples are intentionally deferred so their effect can be
+measured separately.
+
+`llm-investigator-v3` is a narrow controlled iteration over the same evidence representation. It
+targets complete required-source references and nearest-label overdiagnosis through prompt text
+only.
 
 Groq is a single small transport adapter behind the existing `StructuredModel` protocol, not a
 provider platform. The extended 16-scenario set adds semantic rephrasing, multi-step causal
 synthesis, unsupported evidence, conflicting evidence, and distractors without rewriting the
 original 11 cases. The deterministic path scores 14/16 on semantic correctness in that extended
-set; no real Groq benchmark result is claimed here.
+set.
+
+## Controlled Prompt Engineering Experiments
+
+The repository treats prompts as versioned engineering artifacts rather than mutable strings tuned
+until one example looks convincing. Each revision is persisted in experiment metadata and run
+against the same benchmark before its effect is assessed.
+
+### Prompt v1
+
+The initial structured investigator established the probabilistic baseline:
+
+- diagnosis accuracy: 3/8;
+- abstention accuracy: 2/8;
+- evidence-reference validity: 6/15.
+
+It frequently selected unsupported diagnoses, abstained poorly, and returned weakly grounded or
+invalid evidence references.
+
+### Prompt v2
+
+The second experiment introduced explicit prompt versioning, self-contained evidence serialization,
+and stronger grounding and abstention instructions:
+
+- diagnosis accuracy: 5/8;
+- abstention accuracy: 4/8;
+- evidence-reference validity: 10/15.
+
+The measurable improvement showed that clearer evidence presentation mattered. Remaining failures
+mostly omitted required evidence sources, while nearest-label reasoning still produced unsupported
+diagnoses.
+
+### Prompt v3
+
+The third experiment added explicit source-coverage requirements, causal diagnosis boundaries,
+stronger abstention rules, required deployment context, and conditional service-health coverage.
+It states directly that similarity is not causal evidence:
+
+- diagnosis accuracy: 7/8;
+- abstention accuracy: 6/8;
+- evidence-reference validity: 14/15.
+
+Structured-response validity remained 15/15. Almost all grounding failures were removed; one
+invalid-reference failure and two semantic edge cases remained. The result is materially better,
+not perfect.
+
+| Prompt | Diagnosis | Abstention | Evidence References |
+| ------ | --------- | ---------- | ------------------- |
+| v1     | 3/8       | 2/8        | 6/15                |
+| v2     | 5/8       | 4/8        | 10/15               |
+| v3     | 7/8       | 6/8        | 14/15               |
+
+Every run used identical scenarios, evaluator, validators, provider, and model. Only the prompt
+changed. That isolation makes the progression a controlled engineering experiment rather than
+anecdotal prompt optimization.
+
+### Why deterministic validation still exists
+
+Prompt improvements do not remove the need for deterministic verification. The validation layer:
+
+- rejects unsupported diagnosis identifiers and malformed decision combinations;
+- verifies that cited evidence IDs exist;
+- enforces required evidence-source coverage;
+- catches edge cases that an improved model still misses;
+- keeps probabilistic interpretation separate from deterministic verification.
+
+Semantic evaluation separately exposes supported-but-incorrect diagnoses that structural and
+reference validation cannot prove or disprove.
+
+This is not compensation for a bad prompt. It is an intentional reliability boundary: model
+behavior can improve while the system continues to enforce stable, machine-readable invariants.
+
+Reliable AI systems improve through controlled experimentation and measurement rather than
+intuition. Prompt revisions in this repository are versioned, benchmarked, reproducible, and
+compared with earlier experiments. Successful and unsuccessful iterations are both documented
+because both reveal how the system behaves.
 
 ## Local Experiment Tracking
 
@@ -529,16 +615,23 @@ python -m ai_investigation.evaluate \
 Run the same extended benchmark through Groq explicitly:
 
 ```bash
-export GROQ_API_KEY="your-api-key"
-export AI_INVESTIGATION_PROVIDER=groq
-export AI_INVESTIGATION_MODEL=llama-3.3-70b-versatile
+# .env
+GROQ_API_KEY=your-api-key
+AI_INVESTIGATION_PROVIDER=groq
+AI_INVESTIGATION_MODEL=llama-3.3-70b-versatile
+
 python -m ai_investigation.evaluate \
   --investigator llm \
   --provider groq \
   --model llama-3.3-70b-versatile \
+  --prompt-version v3 \
   --scenarios tests/fixtures/evaluation_scenarios_m10.json \
   --save-experiment
 ```
+
+The evaluation CLI loads `.env` from the current directory. Explicit `--provider` and `--model`
+arguments override those environment defaults. Credentials are never stored in experiment
+metadata.
 
 The real-provider smoke test is skipped by default and makes at most one request when enabled:
 

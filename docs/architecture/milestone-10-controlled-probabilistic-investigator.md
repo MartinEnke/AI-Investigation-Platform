@@ -85,8 +85,8 @@ with five controlled cases:
 
 This creates a 16-scenario comparison set without copying the original fixtures. The deterministic
 baseline remains 11/11 on its established set and is semantically correct on 14/16 extended cases;
-the two misses are the intended generalization cases. A Groq result is not documented until an
-explicit real-provider experiment is run.
+the two misses are the intended generalization cases. Probabilistic results are interpreted only
+within this controlled synthetic benchmark.
 
 Experiment metadata persists provider, model, prompt version, and response-schema version for LLM
 runs. Old schema-version-1 records that lack the new optional metadata remain readable. Existing
@@ -101,3 +101,57 @@ This milestone does not add agent behavior, tool calling, retries, fallback mode
 confidence calibration, or an LLM judge. The two new diagnosis categories define evaluation labels
 and canonical result conversion for the experimental path; they do not expand deterministic rule
 behavior.
+
+## Milestone 10.1: Grounding and Abstention
+
+The first controlled 10.1 change adds explicit `v1` and `v2` prompt selection without changing the
+investigation architecture. `v1` remains the default and preserves the Milestone 10 prompt.
+`v2` keeps the existing structured response schema and numbered-reference validation while making
+each LLM-facing evidence item self-contained: exact ID, type, source, observation, and original
+factual content.
+
+The `v2` instructions tighten grounding, diagnosis boundaries, and abstention behavior. Providers,
+benchmark scenarios, deterministic reasoning, evaluation, comparison, and regression policies are
+unchanged. New experiments persist the stable identifier `llm-investigator-v2`; older experiment
+records without prompt metadata remain readable. Few-shot examples are intentionally deferred to a
+separate experiment.
+
+`v3` preserves the v2 evidence representation and every existing architectural boundary. Its only
+change is concise prompt guidance requiring deployment and cause-establishing log references,
+conditional service-health coverage, and abstention when a required source is absent. It also
+draws explicit causal boundaries around generic database errors and timeout symptoms, and prohibits
+mapping an unsupported cause to the nearest supported label. Benchmark fixtures, validators,
+schemas, providers, scoring, and deterministic behavior remain unchanged.
+
+## Completed prompt experiment cycle
+
+The three Groq prompt experiments used the same 16 scenarios, evaluator, deterministic validators,
+provider, and `llama-3.3-70b-versatile` model. Only the versioned prompt changed.
+
+| Prompt | Diagnosis accuracy | Abstention accuracy | Evidence-reference validity |
+| ------ | ------------------ | ------------------- | --------------------------- |
+| v1     | 3/8                | 2/8                 | 6/15                        |
+| v2     | 5/8                | 4/8                 | 10/15                       |
+| v3     | 7/8                | 6/8                 | 14/15                       |
+
+The v1 run exposed frequent unsupported diagnoses, weak abstention, and poor grounding. V2's
+self-contained evidence representation and explicit grounding rules improved every measured
+dimension, but several diagnoses still omitted required source categories and symptom similarity
+still encouraged nearest-label overdiagnosis. V3 made source coverage and causal boundaries
+explicit. Structured-response validity remained 15/15, almost all grounding failures disappeared,
+and the remaining failures narrowed to one invalid reference and two semantic edge cases.
+
+These results do not establish general Groq or model performance. They describe three reproducible
+runs of this concrete system and benchmark configuration.
+
+### Deterministic validation as a reliability layer
+
+The experiment improved model behavior but did not make deterministic validation redundant.
+Reference existence, required source coverage, diagnosis identifiers, response structure, and field
+combinations remain deterministic invariants. They prevent unsupported outputs from silently
+becoming valid investigations and expose failures that prompt changes alone do not eliminate.
+
+The validator is therefore not a patch for an inadequate prompt. It deliberately separates
+probabilistic interpretation from deterministic verification. Treating each prompt as a versioned,
+benchmarked artifact makes successful and unsuccessful iterations inspectable rather than relying
+on intuition or selectively chosen examples.

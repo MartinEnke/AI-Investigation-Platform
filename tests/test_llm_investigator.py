@@ -13,8 +13,12 @@ from ai_investigation.llm_investigator import (
     LLMInvestigator,
     ModelProviderError,
     ModelRefusalError,
+    PROMPT_VERSION_V1,
+    PROMPT_VERSION_V2,
+    PROMPT_VERSION_V3,
     build_prompt,
     parse_decision,
+    serialize_evidence_v2,
     validate_evidence_references,
 )
 from ai_investigation.tools import JsonDeploymentTool, JsonLogTool, JsonServiceHealthTool
@@ -69,6 +73,105 @@ def test_prompt_contains_complete_structured_and_numbered_evidence(
     assert '"reference":2,"source":"logs"' in prompt
     assert '"reference":3,"source":"service_health"' in prompt
     assert "Do not invent or request additional evidence." in prompt
+
+
+def test_prompt_v1_is_the_preserved_default(fixture_directory: Path) -> None:
+    collected = collect(fixture_directory)
+
+    assert build_prompt(collected) == build_prompt(collected, "v1")
+    assert f"Prompt version: {PROMPT_VERSION_V1}." in build_prompt(collected)
+    assert '"reference":1,"source":"deployment"' in build_prompt(collected)
+
+
+@pytest.mark.parametrize("version", ("v1", "v2", "v3"))
+def test_all_prompt_versions_are_selectable(
+    fixture_directory: Path,
+    version: str,
+) -> None:
+    assert f"Prompt version: llm-investigator-{version}." in build_prompt(
+        collect(fixture_directory), version
+    )
+
+
+def test_prompt_v2_uses_self_contained_exact_evidence_ids(
+    fixture_directory: Path,
+) -> None:
+    collected = collect(fixture_directory)
+
+    payload = serialize_evidence_v2(collected)
+
+    assert [item["id"] for item in payload["evidence"]] == [1, 2, 3]
+    assert payload["evidence"][0] == {
+        "id": 1,
+        "type": "deployment",
+        "source": "deployment",
+        "observation": "deploy-1042 has status failed and failed stage health_check.",
+        "content": {
+            "id": "deploy-1042",
+            "service": "checkout-api",
+            "status": "failed",
+            "failed_stage": "health_check",
+        },
+    }
+    assert payload["evidence"][1]["type"] == "error_log"
+    assert payload["evidence"][1]["source"] == "logs"
+    assert payload["evidence"][1]["content"]["message"] == (
+        "Health check timed out after 30 seconds."
+    )
+
+
+def test_prompt_v2_contains_grounding_abstention_and_diagnosis_boundaries(
+    fixture_directory: Path,
+) -> None:
+    prompt = build_prompt(collect(fixture_directory), "v2")
+
+    assert f"Prompt version: {PROMPT_VERSION_V2}." in prompt
+    assert "The only valid evidence IDs are [1, 2, 3]" in prompt
+    assert "never invent an evidence ID" in prompt
+    assert "directly support the diagnosis" in prompt
+    assert "incomplete, conflicting, unsupported" in prompt
+    assert "multiple diagnoses equally plausible" in prompt
+    assert "generic errors" in prompt
+    assert "Prefer abstention over guessing" in prompt
+    assert "Distinguish missing_environment_variable from missing_database_configuration" in prompt
+    assert "specifically supports missing or invalid database configuration" in prompt
+
+
+def test_llm_investigator_selects_prompt_v2(fixture_directory: Path) -> None:
+    model = FakeModel(response())
+
+    LLMInvestigator(model, "v2").investigate(collect(fixture_directory))
+
+    assert len(model.prompts) == 1
+    assert f"Prompt version: {PROMPT_VERSION_V2}." in model.prompts[0]
+
+
+def test_prompt_v3_requires_complete_evidence_source_coverage(
+    fixture_directory: Path,
+) -> None:
+    prompt = build_prompt(collect(fixture_directory), "v3")
+
+    assert f"Prompt version: {PROMPT_VERSION_V3}." in prompt
+    assert "Evidence references are part of the validity contract" in prompt
+    assert "Every diagnosis must reference the deployment evidence" in prompt
+    assert "all log evidence necessary to establish the claimed cause" in prompt
+    assert "Reference service-health evidence whenever" in prompt
+    assert "Do not return a diagnosis when a required evidence source is missing" in prompt
+    assert "return only these exact integer IDs" in prompt
+
+
+def test_prompt_v3_tightens_database_and_health_check_boundaries(
+    fixture_directory: Path,
+) -> None:
+    prompt = build_prompt(collect(fixture_directory), "v3")
+
+    assert "A generic database error does not establish database_migration_failure" in prompt
+    assert "explicitly connects the failure to migration execution" in prompt
+    assert "A timeout symptom does not establish health_check_timeout" in prompt
+    assert "directly connects the timeout to a deployment health check" in prompt
+    assert "Never choose the closest supported diagnosis" in prompt
+    assert "similarity is not sufficient causal evidence" in prompt
+    assert "outside the supported diagnosis set" in prompt
 
 
 def test_response_schema_matches_strict_application_contract() -> None:
