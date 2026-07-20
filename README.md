@@ -1,9 +1,9 @@
 # AI Investigation Platform
 
 ![Python 3.13+](https://img.shields.io/badge/Python-3.13%2B-3776AB)
-![Tests](https://img.shields.io/badge/tests-188%20passing-2E8B57)
+![Tests](https://img.shields.io/badge/tests-214%20passing-2E8B57)
 ![Holdout scenarios](https://img.shields.io/badge/holdout-20%20scenarios-2E8B57)
-![Milestone 11](https://img.shields.io/badge/milestone-11-6C63FF)
+![Milestone 12.2](https://img.shields.io/badge/milestone-12.2-6C63FF)
 ![Architecture](https://img.shields.io/badge/architecture-deterministic--first-555555)
 
 Exploring how reliable AI systems are engineered—through deterministic evidence collection, explicit evaluation, progressive orchestration, and explainable investigations.
@@ -58,9 +58,10 @@ It currently includes:
 - structured scenario results, aggregate metrics, and text or JSON evaluation reports;
 - local experiment metadata, stage events, timing, persistence, inspection, and comparison;
 - typed scenario changes, failure categories, multidimensional deltas, and recommendations;
-- 188 passing tests (plus one opt-in provider test skipped by default);
+- 214 passing tests (plus one opt-in provider test skipped by default);
 - 11 established regression scenarios and 5 Milestone 10 generalization scenarios.
 - a separate frozen 20-scenario Milestone 11 holdout benchmark.
+- an explicit immutable uncertainty model and disconnected deterministic decision policy.
 
 The supported diagnosis rules are intentionally narrow:
 
@@ -341,6 +342,27 @@ reference, invalid response, provider failure, and not evaluated. Stored experim
 the scenario source, and experiment inspection now surfaces it explicitly so development and
 holdout runs cannot be confused.
 
+## Uncertainty and Decision Policy
+
+Milestone 11 exposed complementary behavior: deterministic reasoning abstained safely but missed
+four supported holdout diagnoses, while LLM v3 found every supported diagnosis but produced two
+false diagnoses instead of abstaining. Milestone 12 treats this as a decision-policy problem rather
+than immediately changing the prompt or combining investigators.
+
+The new immutable domain layer represents supported candidates, supporting and contradicting
+evidence, source completeness, evidence strength, unsupported signals, conflicts, and insufficient
+evidence. A pure deterministic policy then returns one of three outcomes:
+
+- `diagnosis` for exactly one sufficiently supported, complete candidate;
+- `abstention` when evidence cannot justify a supported cause;
+- `needs_review` when plausible supported candidates or material evidence remain unresolved.
+
+Evidence strength is deliberately distinct from reported confidence, and confidence does not drive
+the policy. This layer is not yet connected to either investigator, CLI, evaluator, or experiment
+comparison, so current outputs and benchmark scores remain unchanged. The design and full decision
+table are documented in the
+[Milestone 12 architecture note](docs/architecture/milestone-12-uncertainty-decision-policy.md).
+
 ## Local Experiment Tracking
 
 Evaluation answers whether behavior met expectations. Observability records how that evaluation
@@ -508,7 +530,8 @@ Limitations are empty for this supported diagnosis. Inconclusive results render 
 │   ├── architecture/
 │   │   ├── milestone-06-deterministic-vs-llm.md
 │   │   ├── milestone-10-controlled-probabilistic-investigator.md
-│   │   └── milestone-11-holdout-evaluation.md
+│   │   ├── milestone-11-holdout-evaluation.md
+│   │   └── milestone-12-uncertainty-decision-policy.md
 │   └── experiments/
 │       ├── milestone-06-gemini-benchmark.md
 │       ├── milestone-7-deterministic-baseline.md
@@ -519,6 +542,7 @@ Limitations are empty for this supported diagnosis. Inconclusive results render 
 │       ├── __init__.py
 │       ├── cli.py
 │       ├── diagnosis.py
+│       ├── decision_policy.py
 │       ├── evaluate.py
 │       ├── experiments.py
 │       ├── evidence.py
@@ -547,6 +571,7 @@ Limitations are empty for this supported diagnosis. Inconclusive results render 
     ├── test_comparison.py
     ├── test_cli.py
     ├── test_diagnosis.py
+    ├── test_decision_policy.py
     ├── test_evaluation.py
     ├── test_evidence.py
     ├── test_experiment_evaluation.py
@@ -804,6 +829,12 @@ Completed
         │
         v
   controlled probabilistic investigator and Groq experiment path
+        │
+        v
+  frozen holdout generalization evaluation
+        │
+        v
+  explicit uncertainty model and deterministic decision policy
 
 Possible directions
   ├── graph orchestration if branching complexity justifies it
