@@ -108,6 +108,7 @@ def _render_record(record, path: Path, show_events: bool) -> str:
         f"Provider: {metadata.provider or 'none'}",
         f"Model: {metadata.model or 'none'}",
         f"Prompt version: {metadata.prompt_version or 'none'}",
+        f"Scenario source: {metadata.scenario_source}",
         f"Scenarios: {metadata.scenario_count}",
         f"Revision: {metadata.repository_revision or 'unavailable'}",
         f"Tags: {', '.join(metadata.tags) or 'none'}",
@@ -120,6 +121,9 @@ def _render_record(record, path: Path, show_events: bool) -> str:
         f"Failed scenarios: {', '.join(failed) or 'none'}",
         f"Artifacts: {path}",
     ]
+    request_delay = dict(metadata.configuration).get("request_delay_seconds")
+    if request_delay is not None and float(request_delay) > 0:
+        lines.insert(7, f"Request delay: {request_delay} seconds")
     if show_events:
         lines.append("Events:")
         lines.extend(_event_line(event) for event in record.events)

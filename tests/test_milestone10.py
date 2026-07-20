@@ -207,6 +207,13 @@ def test_evaluation_cli_rejects_invalid_investigator() -> None:
     assert error.value.code == 2
 
 
+def test_evaluation_cli_rejects_negative_request_delay() -> None:
+    with pytest.raises(SystemExit) as error:
+        evaluate_cli.main(["--request-delay-seconds", "-0.1"])
+
+    assert error.value.code == 2
+
+
 @pytest.mark.parametrize(
     ("extra_arguments", "environment_provider", "expected_model"),
     (

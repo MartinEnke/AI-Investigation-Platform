@@ -1,9 +1,9 @@
 # AI Investigation Platform
 
 ![Python 3.13+](https://img.shields.io/badge/Python-3.13%2B-3776AB)
-![Tests](https://img.shields.io/badge/tests-178%20passing-2E8B57)
-![Evaluation scenarios](https://img.shields.io/badge/evaluations-16%20scenarios-2E8B57)
-![Milestone 10.1](https://img.shields.io/badge/milestone-10.1-6C63FF)
+![Tests](https://img.shields.io/badge/tests-188%20passing-2E8B57)
+![Holdout scenarios](https://img.shields.io/badge/holdout-20%20scenarios-2E8B57)
+![Milestone 11](https://img.shields.io/badge/milestone-11-6C63FF)
 ![Architecture](https://img.shields.io/badge/architecture-deterministic--first-555555)
 
 Exploring how reliable AI systems are engineered—through deterministic evidence collection, explicit evaluation, progressive orchestration, and explainable investigations.
@@ -58,8 +58,9 @@ It currently includes:
 - structured scenario results, aggregate metrics, and text or JSON evaluation reports;
 - local experiment metadata, stage events, timing, persistence, inspection, and comparison;
 - typed scenario changes, failure categories, multidimensional deltas, and recommendations;
-- 178 passing tests (plus one opt-in provider test skipped by default);
+- 188 passing tests (plus one opt-in provider test skipped by default);
 - 11 established regression scenarios and 5 Milestone 10 generalization scenarios.
+- a separate frozen 20-scenario Milestone 11 holdout benchmark.
 
 The supported diagnosis rules are intentionally narrow:
 
@@ -309,6 +310,37 @@ intuition. Prompt revisions in this repository are versioned, benchmarked, repro
 compared with earlier experiments. Successful and unsuccessful iterations are both documented
 because both reveal how the system behaves.
 
+## Generalization and Holdout Evaluation
+
+Milestone 10.1 improved prompt v3 using failures observed on the original development benchmark.
+That makes another run on the same scenarios insufficient evidence of generalization. Milestone 11
+therefore adds a separate 20-scenario holdout created after v3 was frozen.
+
+The holdout contains 10 supported diagnoses and 10 required abstentions. Its cases vary wording,
+formatting, evidence order, distractors, missing evidence, conflicting signals, duplicate records,
+and unsupported causes. Stable robustness categories make those dimensions inspectable without
+changing diagnosis or scoring semantics.
+
+The experimental rules are strict:
+
+- prompt v3 is frozen;
+- deterministic reasoning is frozen;
+- response and evidence-reference validators are frozen;
+- the original Milestone 10 scenarios remain unchanged;
+- neither investigator may change before the first holdout comparison.
+
+The planned comparison runs the deterministic investigator and the Groq-backed LLM investigator
+with prompt v3 over exactly the same holdout. No Groq holdout result is published yet. The outcome
+will inform whether the next step should retain the current deterministic boundary, expand the
+model's role, or test a narrowly defined hybrid decision policy. It does not yet justify graph or
+multi-agent orchestration.
+
+Evaluation reports now supplement existing metrics with deterministic error categories such as
+false diagnosis, unnecessary abstention, wrong diagnosis, missing required source, invalid
+reference, invalid response, provider failure, and not evaluated. Stored experiments already record
+the scenario source, and experiment inspection now surfaces it explicitly so development and
+holdout runs cannot be confused.
+
 ## Local Experiment Tracking
 
 Evaluation answers whether behavior met expectations. Observability records how that evaluation
@@ -475,7 +507,8 @@ Limitations are empty for this supported diagnosis. Inconclusive results render 
 ├── docs/
 │   ├── architecture/
 │   │   ├── milestone-06-deterministic-vs-llm.md
-│   │   └── milestone-10-controlled-probabilistic-investigator.md
+│   │   ├── milestone-10-controlled-probabilistic-investigator.md
+│   │   └── milestone-11-holdout-evaluation.md
 │   └── experiments/
 │       ├── milestone-06-gemini-benchmark.md
 │       ├── milestone-7-deterministic-baseline.md
@@ -521,6 +554,7 @@ Limitations are empty for this supported diagnosis. Inconclusive results render 
     ├── test_gemini_model.py
     ├── test_groq_integration.py
     ├── test_groq_model.py
+    ├── test_holdout_m11.py
     ├── test_investigator.py
     ├── test_llm_investigator.py
     ├── test_milestone10.py
@@ -529,6 +563,7 @@ Limitations are empty for this supported diagnosis. Inconclusive results render 
         ├── deployments.json
         ├── evaluation_scenarios.json
         ├── evaluation_scenarios_m10.json
+        ├── evaluation_scenarios_holdout_m11.json
         ├── logs.json
         └── service_health.json
 ```
@@ -611,6 +646,33 @@ python -m ai_investigation.evaluate \
   --investigator deterministic \
   --scenarios tests/fixtures/evaluation_scenarios_m10.json
 ```
+
+Run the frozen deterministic holdout:
+
+```bash
+python -m ai_investigation.evaluate \
+  --investigator deterministic \
+  --scenarios tests/fixtures/evaluation_scenarios_holdout_m11.json \
+  --save-experiment \
+  --tag milestone-11-holdout
+```
+
+Run the same holdout with frozen prompt v3 only when a real-provider experiment is intended:
+
+```bash
+python -m ai_investigation.evaluate \
+  --investigator llm \
+  --prompt-version v3 \
+  --scenarios tests/fixtures/evaluation_scenarios_holdout_m11.json \
+  --request-delay-seconds 4 \
+  --save-experiment \
+  --tag milestone-11-holdout
+```
+
+Request pacing is an evaluation reliability control for external provider rate limits. It sleeps
+only between provider-backed LLM scenario requests, is recorded with the experiment, and does not
+change prompts, evidence, validation, or investigator reasoning. Its default is zero; deterministic
+evaluation never sleeps.
 
 Run the same extended benchmark through Groq explicitly:
 

@@ -116,5 +116,167 @@
     "deployment_id": "deploy-1057",
     "level": "error",
     "message": "Deprecated cache setting will be removed in a future release."
+  },
+  {
+    "deployment_id": "deploy-1101",
+    "level": "error",
+    "reason": "timeout",
+    "message": "Readiness probe exceeded its 45-second deployment window."
+  },
+  {
+    "deployment_id": "deploy-1102",
+    "level": "error",
+    "message": "Telemetry sidecar disconnected during boot."
+  },
+  {
+    "deployment_id": "deploy-1102",
+    "level": "error",
+    "message": "Required environment variable CACHE_ENDPOINT is not set"
+  },
+  {
+    "deployment_id": "deploy-1103",
+    "level": "error",
+    "message": "Startup configuration has no usable database connection string."
+  },
+  {
+    "deployment_id": "deploy-1104",
+    "level": "error",
+    "message": "schema migration execution aborted: alembic.util.exc.CommandError"
+  },
+  {
+    "deployment_id": "deploy-1105",
+    "level": "error",
+    "message": "DDL lock held by nightly aggregation transaction."
+  },
+  {
+    "deployment_id": "deploy-1105",
+    "level": "error",
+    "message": "Migration runner remained queued until deployment startup expired."
+  },
+  {
+    "deployment_id": "deploy-1106",
+    "level": "error",
+    "message": "Thumbnail preloader reported a transient 404."
+  },
+  {
+    "deployment_id": "deploy-1106",
+    "level": "error",
+    "reason": "timeout",
+    "message": "Liveness verification did not complete before the rollout deadline."
+  },
+  {
+    "deployment_id": "deploy-1107",
+    "level": "error",
+    "message": "Missing environment variable FEATURE_FLAG_TOKEN"
+  },
+  {
+    "deployment_id": "deploy-1107",
+    "level": "error",
+    "message": "Missing environment variable FEATURE_FLAG_TOKEN"
+  },
+  {
+    "deployment_id": "deploy-1108",
+    "level": "error",
+    "message": "event=release database migration failed step=inventory_backfill"
+  },
+  {
+    "deployment_id": "deploy-1108",
+    "level": "error",
+    "message": "Metrics publication failed after the release was cancelled."
+  },
+  {
+    "deployment_id": "deploy-1109",
+    "level": "error",
+    "message": "DB_CONFIG validation: connection parameters absent from runtime settings."
+  },
+  {
+    "deployment_id": "deploy-1110",
+    "level": "error",
+    "message": "Migration worker exceeded its wait budget."
+  },
+  {
+    "deployment_id": "deploy-1110",
+    "level": "error",
+    "message": "Earlier event: analytics transaction retained the schema lock for 22 minutes."
+  },
+  {
+    "deployment_id": "deploy-1111",
+    "level": "error",
+    "message": "TLS handshake rejected: upstream certificate expired."
+  },
+  {
+    "deployment_id": "deploy-1111",
+    "level": "error",
+    "message": "Database client shutdown followed the certificate failure."
+  },
+  {
+    "deployment_id": "deploy-1113",
+    "level": "error",
+    "message": "Worker operation timed out while downloading the initial search snapshot."
+  },
+  {
+    "deployment_id": "deploy-1114",
+    "level": "error",
+    "message": "relation customer_preferences does not exist"
+  },
+  {
+    "deployment_id": "deploy-1115",
+    "level": "error",
+    "message": "Migration failed while applying payment ledger revision."
+  },
+  {
+    "deployment_id": "deploy-1115",
+    "level": "error",
+    "message": "Required environment variable LEDGER_DSN is not set"
+  },
+  {
+    "deployment_id": "deploy-1116",
+    "level": "error",
+    "message": "NetworkPolicy denied egress to dependency endpoint db-proxy.internal."
+  },
+  {
+    "deployment_id": "deploy-1116",
+    "level": "error",
+    "message": "Recommendation engine emitted an unrelated cache warning."
+  },
+  {
+    "deployment_id": "deploy-1117",
+    "level": "error",
+    "message": "Startup initially reported that no database connection string was available."
+  },
+  {
+    "deployment_id": "deploy-1117",
+    "level": "error",
+    "message": "Configuration reload confirmed a valid database connection string before failure."
+  },
+  {
+    "deployment_id": "deploy-1118",
+    "level": "error",
+    "message": "Migration runner completed successfully."
+  },
+  {
+    "deployment_id": "deploy-1118",
+    "level": "error",
+    "message": "Object storage permission denied while loading application assets."
+  },
+  {
+    "deployment_id": "deploy-1119",
+    "level": "error",
+    "message": "No space left on device while expanding the application bundle."
+  },
+  {
+    "deployment_id": "deploy-1119",
+    "level": "error",
+    "message": "No space left on device while expanding the application bundle."
+  },
+  {
+    "deployment_id": "deploy-1120",
+    "level": "error",
+    "message": "Configuration key THEME_NAME has an unsupported value."
+  },
+  {
+    "deployment_id": "deploy-1120",
+    "level": "error",
+    "message": "Static asset directory permission denied."
   }
 ]

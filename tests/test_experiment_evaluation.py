@@ -332,3 +332,66 @@ def test_both_mode_collects_once_and_shares_the_collected_instance(
     assert counting.calls == 1
     assert len(seen) == 2
     assert seen[0] is seen[1]
+
+
+def test_llm_pacing_occurs_only_between_provider_requests(
+    fixture_directory: Path,
+) -> None:
+    collector, investigator = dependencies(fixture_directory)
+    selected = scenarios(fixture_directory)
+    events: list[str] = []
+
+    class SequencedModel:
+        provider_name = "fake"
+        model_name = "sequenced"
+
+        def __init__(self) -> None:
+            self.responses = iter(
+                (
+                    response(),
+                    response("missing_environment_variable", [1, 2]),
+                )
+            )
+
+        def generate(self, prompt: str) -> str:
+            events.append("request")
+            return next(self.responses)
+
+    run_experiment(
+        (selected[0], selected[1], selected[5]),
+        collector,
+        investigator,
+        investigator_mode="llm",
+        structured_model=SequencedModel(),
+        request_delay_seconds=2.5,
+        sleep=lambda seconds: events.append(f"sleep:{seconds}"),
+    )
+
+    assert events == ["request", "sleep:2.5", "request"]
+
+
+def test_zero_delay_and_deterministic_runs_never_sleep(
+    fixture_directory: Path,
+) -> None:
+    collector, investigator = dependencies(fixture_directory)
+    selected = scenarios(fixture_directory)
+    sleeps: list[float] = []
+
+    run_experiment(
+        (selected[0], selected[5]),
+        collector,
+        investigator,
+        investigator_mode="llm",
+        structured_model=FakeModel(response()),
+        sleep=sleeps.append,
+    )
+    run_experiment(
+        (selected[0], selected[5]),
+        collector,
+        investigator,
+        investigator_mode="deterministic",
+        request_delay_seconds=4,
+        sleep=sleeps.append,
+    )
+
+    assert sleeps == []

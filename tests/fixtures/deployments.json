@@ -94,5 +94,125 @@
     "service": "warehouse-api",
     "status": "failed",
     "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1101",
+    "service": "gateway-api",
+    "status": "failed",
+    "failed_stage": "health_check"
+  },
+  {
+    "id": "deploy-1102",
+    "service": "cache-worker",
+    "status": "failed",
+    "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1103",
+    "service": "invoice-api",
+    "status": "failed",
+    "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1104",
+    "service": "audit-api",
+    "status": "failed",
+    "failed_stage": "migration"
+  },
+  {
+    "id": "deploy-1105",
+    "service": "reporting-worker",
+    "status": "failed",
+    "failed_stage": "migration"
+  },
+  {
+    "id": "deploy-1106",
+    "service": "media-api",
+    "status": "failed",
+    "failed_stage": "health_check"
+  },
+  {
+    "id": "deploy-1107",
+    "service": "scheduler",
+    "status": "failed",
+    "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1108",
+    "service": "inventory-api",
+    "status": "failed",
+    "failed_stage": "migration"
+  },
+  {
+    "id": "deploy-1109",
+    "service": "archive-api",
+    "status": "failed",
+    "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1110",
+    "service": "insights-api",
+    "status": "failed",
+    "failed_stage": "migration"
+  },
+  {
+    "id": "deploy-1111",
+    "service": "auth-api",
+    "status": "failed",
+    "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1112",
+    "service": "mailer",
+    "status": "failed",
+    "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1113",
+    "service": "search-indexer",
+    "status": "failed",
+    "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1114",
+    "service": "profile-api-v2",
+    "status": "failed",
+    "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1115",
+    "service": "payment-worker",
+    "status": "failed",
+    "failed_stage": "migration"
+  },
+  {
+    "id": "deploy-1116",
+    "service": "catalog-sync",
+    "status": "failed",
+    "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1117",
+    "service": "billing-worker",
+    "status": "failed",
+    "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1118",
+    "service": "order-api-v2",
+    "status": "failed",
+    "failed_stage": "migration"
+  },
+  {
+    "id": "deploy-1119",
+    "service": "export-worker",
+    "status": "failed",
+    "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1120",
+    "service": "admin-console",
+    "status": "failed",
+    "failed_stage": "startup"
   }
 ]

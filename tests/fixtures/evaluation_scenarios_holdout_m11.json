@@ -1,0 +1,192 @@
+[
+  {
+    "id": "holdout-readiness-window-timeout",
+    "question": "Investigate why deployment deploy-1101 failed.",
+    "expected_root_cause": "The deployment health check timed out because the target service was unhealthy.",
+    "expected_inconclusive": false,
+    "expected_diagnosis_id": "health_check_timeout",
+    "expected_should_abstain": false,
+    "expected_evidence_sources": ["deployment", "logs", "service_health"],
+    "robustness_categories": ["wording_variation", "supported_generalization"]
+  },
+  {
+    "id": "holdout-environment-variable-after-sidecar-error",
+    "question": "What caused deploy-1102 to fail?",
+    "expected_root_cause": "The deployment failed because a required environment variable was missing.",
+    "expected_inconclusive": false,
+    "expected_diagnosis_id": "missing_environment_variable",
+    "expected_should_abstain": false,
+    "expected_evidence_sources": ["deployment", "logs", "logs"],
+    "robustness_categories": ["distractor", "evidence_reordering", "supported_generalization"]
+  },
+  {
+    "id": "holdout-database-configuration-vocabulary",
+    "question": "Explain the failure of deployment deploy-1103.",
+    "expected_root_cause": "The deployment failed because required database connection configuration was missing.",
+    "expected_inconclusive": false,
+    "expected_diagnosis_id": "missing_database_configuration",
+    "expected_should_abstain": false,
+    "expected_evidence_sources": ["deployment", "logs"],
+    "robustness_categories": ["wording_variation", "supported_generalization"]
+  },
+  {
+    "id": "holdout-alembic-schema-execution",
+    "question": "Why was deploy-1104 unsuccessful?",
+    "expected_root_cause": "The deployment failed because a database migration could not be applied.",
+    "expected_inconclusive": false,
+    "expected_diagnosis_id": "database_migration_failure",
+    "expected_should_abstain": false,
+    "expected_evidence_sources": ["deployment", "logs"],
+    "robustness_categories": ["wording_variation", "supported_generalization"]
+  },
+  {
+    "id": "holdout-ddl-contention-synthesis",
+    "question": "Determine the root cause for deploy-1105.",
+    "expected_root_cause": "The deployment migration was blocked by database contention.",
+    "expected_inconclusive": false,
+    "expected_diagnosis_id": "database_contention_blocked_migration",
+    "expected_should_abstain": false,
+    "expected_evidence_sources": ["deployment", "logs", "logs"],
+    "robustness_categories": ["wording_variation", "supported_generalization"]
+  },
+  {
+    "id": "holdout-liveness-timeout-after-distractor",
+    "question": "Why did deployment deploy-1106 fail?",
+    "expected_root_cause": "The deployment health check timed out because the target service was unhealthy.",
+    "expected_inconclusive": false,
+    "expected_diagnosis_id": "health_check_timeout",
+    "expected_should_abstain": false,
+    "expected_evidence_sources": ["deployment", "logs", "logs", "service_health"],
+    "robustness_categories": ["distractor", "evidence_reordering", "supported_generalization"]
+  },
+  {
+    "id": "holdout-duplicate-missing-variable",
+    "question": "Investigate deploy-1107.",
+    "expected_root_cause": "The deployment failed because a required environment variable was missing.",
+    "expected_inconclusive": false,
+    "expected_diagnosis_id": "missing_environment_variable",
+    "expected_should_abstain": false,
+    "expected_evidence_sources": ["deployment", "logs", "logs"],
+    "robustness_categories": ["duplicate_evidence", "supported_generalization"]
+  },
+  {
+    "id": "holdout-structured-migration-event",
+    "question": "Find the cause of deploy-1108's failure.",
+    "expected_root_cause": "The deployment failed because a database migration could not be applied.",
+    "expected_inconclusive": false,
+    "expected_diagnosis_id": "database_migration_failure",
+    "expected_should_abstain": false,
+    "expected_evidence_sources": ["deployment", "logs", "logs"],
+    "robustness_categories": ["distractor", "supported_generalization", "wording_variation"]
+  },
+  {
+    "id": "holdout-semi-structured-db-config",
+    "question": "Why could deploy-1109 not start?",
+    "expected_root_cause": "The deployment failed because required database connection configuration was missing.",
+    "expected_inconclusive": false,
+    "expected_diagnosis_id": "missing_database_configuration",
+    "expected_should_abstain": false,
+    "expected_evidence_sources": ["deployment", "logs"],
+    "robustness_categories": ["wording_variation", "supported_generalization"]
+  },
+  {
+    "id": "holdout-reordered-lock-causality",
+    "question": "Analyze deployment deploy-1110.",
+    "expected_root_cause": "The deployment migration was blocked by database contention.",
+    "expected_inconclusive": false,
+    "expected_diagnosis_id": "database_contention_blocked_migration",
+    "expected_should_abstain": false,
+    "expected_evidence_sources": ["deployment", "logs", "logs", "service_health"],
+    "robustness_categories": ["evidence_reordering", "supported_generalization"]
+  },
+  {
+    "id": "holdout-expired-tls-certificate",
+    "question": "Why did deploy-1111 fail?",
+    "expected_root_cause": null,
+    "expected_inconclusive": true,
+    "expected_should_abstain": true,
+    "expected_evidence_sources": ["deployment", "logs", "logs", "service_health"],
+    "robustness_categories": ["unsupported_cause", "distractor"]
+  },
+  {
+    "id": "holdout-no-error-logs",
+    "question": "Investigate deployment deploy-1112.",
+    "expected_root_cause": null,
+    "expected_inconclusive": true,
+    "expected_should_abstain": true,
+    "expected_evidence_sources": ["deployment", "service_health"],
+    "robustness_categories": ["missing_evidence"]
+  },
+  {
+    "id": "holdout-non-health-timeout-symptom",
+    "question": "What caused deploy-1113 to fail?",
+    "expected_root_cause": null,
+    "expected_inconclusive": true,
+    "expected_should_abstain": true,
+    "expected_evidence_sources": ["deployment", "logs", "service_health"],
+    "robustness_categories": ["unsupported_cause", "wording_variation"]
+  },
+  {
+    "id": "holdout-generic-relation-error",
+    "question": "Explain deploy-1114's startup failure.",
+    "expected_root_cause": null,
+    "expected_inconclusive": true,
+    "expected_should_abstain": true,
+    "expected_evidence_sources": ["deployment", "logs"],
+    "robustness_categories": ["unsupported_cause"]
+  },
+  {
+    "id": "holdout-two-strong-supported-causes",
+    "question": "Determine why deploy-1115 failed.",
+    "expected_root_cause": null,
+    "expected_inconclusive": true,
+    "expected_should_abstain": true,
+    "expected_evidence_sources": ["deployment", "logs", "logs"],
+    "robustness_categories": ["conflicting_evidence"]
+  },
+  {
+    "id": "holdout-network-policy-db-distractor",
+    "question": "What prevented deploy-1116 from starting?",
+    "expected_root_cause": null,
+    "expected_inconclusive": true,
+    "expected_should_abstain": true,
+    "expected_evidence_sources": ["deployment", "logs", "logs"],
+    "robustness_categories": ["unsupported_cause", "distractor"]
+  },
+  {
+    "id": "holdout-database-config-contradiction",
+    "question": "Why did deployment deploy-1117 fail?",
+    "expected_root_cause": null,
+    "expected_inconclusive": true,
+    "expected_should_abstain": true,
+    "expected_evidence_sources": ["deployment", "logs", "logs"],
+    "robustness_categories": ["conflicting_evidence", "evidence_reordering"]
+  },
+  {
+    "id": "holdout-successful-migration-permission-failure",
+    "question": "Why did deployment deploy-1118 fail?",
+    "expected_root_cause": null,
+    "expected_inconclusive": true,
+    "expected_should_abstain": true,
+    "expected_evidence_sources": ["deployment", "logs", "logs"],
+    "robustness_categories": ["unsupported_cause", "conflicting_evidence"]
+  },
+  {
+    "id": "holdout-duplicate-disk-exhaustion",
+    "question": "Analyze deploy-1119.",
+    "expected_root_cause": null,
+    "expected_inconclusive": true,
+    "expected_should_abstain": true,
+    "expected_evidence_sources": ["deployment", "logs", "logs"],
+    "robustness_categories": ["unsupported_cause", "duplicate_evidence"]
+  },
+  {
+    "id": "holdout-unrelated-invalid-configuration",
+    "question": "What caused deployment deploy-1120 to fail?",
+    "expected_root_cause": null,
+    "expected_inconclusive": true,
+    "expected_should_abstain": true,
+    "expected_evidence_sources": ["deployment", "logs", "logs"],
+    "robustness_categories": ["unsupported_cause", "distractor"]
+  }
+]

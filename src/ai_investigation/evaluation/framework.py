@@ -9,6 +9,7 @@ from typing import Literal
 
 from ai_investigation.evaluation.models import (
     AggregateMetrics,
+    ErrorCategory,
     EvaluationReport,
     EvaluationScenario,
     ScenarioRunResult,
@@ -43,6 +44,8 @@ def run_experiment(
     investigator_mode: InvestigatorMode = "deterministic",
     structured_model: StructuredModel | None = None,
     prompt_version: PromptVersion = DEFAULT_PROMPT_VERSION,
+    request_delay_seconds: float = 0.0,
+    sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.perf_counter,
     observer: EventObserver | None = None,
 ) -> EvaluationReport:
@@ -52,6 +55,8 @@ def run_experiment(
         raise ValueError(f"Unknown investigator mode: {investigator_mode}.")
     if investigator_mode in ("gemini", "llm", "both") and structured_model is None:
         raise ValueError("A structured model is required for Gemini evaluation.")
+    if request_delay_seconds < 0:
+        raise ValueError("Request delay must be non-negative.")
 
     selected_scenarios = tuple(scenarios)
     experiment_started = clock()
@@ -74,6 +79,7 @@ def run_experiment(
         if structured_model is not None and investigator_mode in ("gemini", "llm", "both")
         else None
     )
+    provider_request_completed = False
 
     for scenario in selected_scenarios:
         scenario_started = clock()
@@ -142,6 +148,16 @@ def run_experiment(
         if investigator_mode in ("gemini", "llm", "both"):
             assert llm_investigator is not None
             model_investigator_name = "llm" if investigator_mode == "llm" else "gemini"
+            provider_call_expected = (
+                collected.request.deployment_id is not None
+                and collected.deployment is not None
+            )
+            if (
+                provider_call_expected
+                and provider_request_completed
+                and request_delay_seconds > 0
+            ):
+                sleep(request_delay_seconds)
             _emit(
                 observer,
                 "model_investigation_started",
@@ -152,6 +168,8 @@ def run_experiment(
             )
             started = clock()
             outcome = llm_investigator.investigate(collected)
+            if provider_call_expected:
+                provider_request_completed = True
             latency_ms = (clock() - started) * 1000
             outcome_status = outcome.status
             _emit(
@@ -315,6 +333,12 @@ def render_text_report(report: EvaluationReport) -> str:
             f"Semantic failures: {aggregate.semantic_failures}",
         )
     )
+    if aggregate.error_categories:
+        lines.extend(("", "Error categories:"))
+        lines.extend(
+            f"- {category}: {count}"
+            for category, count in aggregate.error_categories
+        )
     if aggregate.average_latency_ms is not None:
         lines.append(f"Average latency: {aggregate.average_latency_ms:.3f} ms")
     if aggregate.agreement_cases:
@@ -473,6 +497,16 @@ def _scenario_result(
         latency_ms=latency_ms,
         error=error,
         semantic_correctness_status=semantic_correctness_status,
+        robustness_categories=scenario.robustness_categories,
+        error_category=_error_category(
+            execution_status=execution_status,
+            expected_diagnosis_id=expected_diagnosis,
+            expected_abstention=expected_abstention,
+            actual_diagnosis_id=actual_diagnosis_id,
+            actual_abstention=actual_abstention,
+            semantic_status=semantic_correctness_status,
+            error=error,
+        ),
     )
 
 
@@ -568,6 +602,9 @@ def _aggregate(
         and result.semantic_correctness_status == "incorrect"
         and result.confidence is not None
     )
+    error_counts = Counter(
+        result.error_category for result in results if result.error_category is not None
+    )
     return AggregateMetrics(
         total_scenarios=total_scenarios,
         total_runs=len(results),
@@ -599,7 +636,52 @@ def _aggregate(
         agreement_cases=len(agreements),
         average_confidence_correct=_average(correct_confidence),
         average_confidence_incorrect=_average(incorrect_confidence),
+        error_categories=tuple(
+            (category, error_counts[category])
+            for category in (
+                "false_diagnosis",
+                "unnecessary_abstention",
+                "wrong_diagnosis",
+                "invalid_evidence_reference",
+                "missing_required_source",
+                "provider_failure",
+                "invalid_structured_response",
+                "not_evaluated",
+            )
+            if error_counts[category]
+        ),
     )
+
+
+def _error_category(
+    *,
+    execution_status: str,
+    expected_diagnosis_id: str | None,
+    expected_abstention: bool,
+    actual_diagnosis_id: str | None,
+    actual_abstention: bool | None,
+    semantic_status: str,
+    error: str | None,
+) -> ErrorCategory | None:
+    if execution_status == "provider_failure":
+        return "provider_failure"
+    if execution_status == "invalid_response":
+        return "invalid_structured_response"
+    if execution_status == "invalid_references":
+        if error is not None and "missing required sources" in error.casefold():
+            return "missing_required_source"
+        return "invalid_evidence_reference"
+    if execution_status == "not_evaluated" and semantic_status != "correct":
+        return "not_evaluated"
+    if semantic_status != "incorrect":
+        return None
+    if expected_abstention and actual_diagnosis_id is not None:
+        return "false_diagnosis"
+    if expected_diagnosis_id is not None and actual_abstention is True:
+        return "unnecessary_abstention"
+    if expected_diagnosis_id is not None and actual_diagnosis_id is not None:
+        return "wrong_diagnosis"
+    return "not_evaluated"
 
 
 def _average(values: tuple[float, ...]) -> float | None:
@@ -668,6 +750,8 @@ def _scenario_lines(result: ScenarioRunResult) -> list[str]:
         lines.append(f"Unexpected sources: {', '.join(result.unexpected_sources)}")
     if result.confidence is not None:
         lines.append(f"Confidence: {result.confidence:.2f}")
+    if result.error_category is not None:
+        lines.append(f"Error category: {result.error_category}")
     lines.append(f"Latency: {result.latency_ms:.3f} ms")
     return lines
 

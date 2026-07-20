@@ -23,5 +23,35 @@
     "service": "orders-api",
     "status": "unknown",
     "detail": "No health response was recorded before the process exited."
+  },
+  {
+    "service": "gateway-api",
+    "status": "unhealthy",
+    "detail": "Readiness endpoint never returned a successful response."
+  },
+  {
+    "service": "media-api",
+    "status": "unhealthy",
+    "detail": "Liveness endpoint remained unavailable during rollout."
+  },
+  {
+    "service": "auth-api",
+    "status": "unhealthy",
+    "detail": "Startup dependency handshake failed."
+  },
+  {
+    "service": "mailer",
+    "status": "healthy",
+    "detail": "Service process answered its local readiness endpoint."
+  },
+  {
+    "service": "search-indexer",
+    "status": "unhealthy",
+    "detail": "Indexer was unavailable while its snapshot download stalled."
+  },
+  {
+    "service": "insights-api",
+    "status": "unhealthy",
+    "detail": "Startup remained blocked behind the schema lock."
   }
 ]

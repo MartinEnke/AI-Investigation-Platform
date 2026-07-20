@@ -373,6 +373,8 @@ def test_evaluation_cli_saves_fake_model_experiment(
             "gemini",
             "--prompt-version",
             "v3",
+            "--request-delay-seconds",
+            "2.5",
             "--save-experiment",
             "--experiment-dir",
             str(root),
@@ -392,7 +394,13 @@ def test_evaluation_cli_saves_fake_model_experiment(
     assert record.metadata.model == "fake-model-v1"
     assert record.metadata.prompt_version == "llm-investigator-v3"
     assert ("prompt_version", "v3") in record.metadata.configuration
+    assert ("request_delay_seconds", "2.5") in record.metadata.configuration
     assert "Experiment ID:" in capsys.readouterr().out
+
+    assert experiments_main(
+        ["--experiment-dir", str(root), "show", record.metadata.experiment_id]
+    ) == 0
+    assert "Request delay: 2.5 seconds" in capsys.readouterr().out
 
 
 def test_deterministic_and_llm_experiments_compare_without_special_cases(

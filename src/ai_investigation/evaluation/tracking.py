@@ -341,7 +341,15 @@ def _record_from_dict(value: object) -> ExperimentRecord:
             "tags": tuple(metadata_value["tags"]),
         }
     )
-    aggregate = AggregateMetrics(**report_value["aggregate"])
+    aggregate_value = report_value["aggregate"]
+    aggregate = AggregateMetrics(
+        **{
+            **aggregate_value,
+            "error_categories": tuple(
+                tuple(item) for item in aggregate_value.get("error_categories", ())
+            ),
+        }
+    )
     scenario_results = tuple(
         ScenarioRunResult(
             **{
@@ -350,6 +358,7 @@ def _record_from_dict(value: object) -> ExperimentRecord:
                 "referenced_sources": tuple(item["referenced_sources"]),
                 "missing_sources": tuple(item["missing_sources"]),
                 "unexpected_sources": tuple(item["unexpected_sources"]),
+                "robustness_categories": tuple(item.get("robustness_categories", ())),
             }
         )
         for item in report_value["scenarios"]

@@ -3,6 +3,17 @@
 from dataclasses import dataclass
 from typing import Literal
 
+ErrorCategory = Literal[
+    "false_diagnosis",
+    "unnecessary_abstention",
+    "wrong_diagnosis",
+    "invalid_evidence_reference",
+    "missing_required_source",
+    "provider_failure",
+    "invalid_structured_response",
+    "not_evaluated",
+]
+
 
 @dataclass(frozen=True, slots=True)
 class EvaluationScenario:
@@ -20,6 +31,7 @@ class EvaluationScenario:
     expected_diagnosis_id: str | None = None
     expected_should_abstain: bool | None = None
     expected_execution_status: str | None = None
+    robustness_categories: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +87,8 @@ class ScenarioRunResult:
     error: str | None
     semantic_correctness_status: Literal["correct", "incorrect", "not_evaluated"]
     deterministic_model_agreement: bool | None = None
+    robustness_categories: tuple[str, ...] = ()
+    error_category: ErrorCategory | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +115,7 @@ class AggregateMetrics:
     agreement_cases: int
     average_confidence_correct: float | None
     average_confidence_incorrect: float | None
+    error_categories: tuple[tuple[str, int], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

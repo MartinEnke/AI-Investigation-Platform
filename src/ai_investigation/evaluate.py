@@ -1,10 +1,13 @@
 """Command-line entry point for reusable investigation evaluation."""
 
 import argparse
+from collections.abc import Callable
+import math
 from pathlib import Path
 from typing import Sequence
 import os
 import sys
+import time
 
 from dotenv import load_dotenv
 
@@ -81,6 +84,7 @@ def main(
     argv: Sequence[str] | None = None,
     *,
     structured_model: StructuredModel | None = None,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> int:
     load_dotenv(Path.cwd() / ".env", override=False)
     root = _repository_root()
@@ -104,6 +108,12 @@ def main(
         "--prompt-version",
         choices=("v1", "v2", "v3"),
         default=DEFAULT_PROMPT_VERSION,
+    )
+    parser.add_argument(
+        "--request-delay-seconds",
+        type=_non_negative_float,
+        default=0.0,
+        help="Delay between provider-backed LLM scenario requests (default: 0).",
     )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--save-experiment", action="store_true")
@@ -153,6 +163,12 @@ def main(
                             if args.investigator in ("gemini", "both", "llm")
                             else None,
                         ),
+                        (
+                            "request_delay_seconds",
+                            str(args.request_delay_seconds)
+                            if args.investigator in ("gemini", "both", "llm")
+                            else None,
+                        ),
                     )
                     if value is not None
                 ),
@@ -180,6 +196,8 @@ def main(
             investigator_mode=args.investigator,
             structured_model=model,
             prompt_version=args.prompt_version,
+            request_delay_seconds=args.request_delay_seconds,
+            sleep=sleep,
             observer=recorder,
         )
         record = (
@@ -219,6 +237,16 @@ def _portable_path(path: Path, root: Path) -> str:
         return str(path.resolve().relative_to(root.resolve()))
     except ValueError:
         return path.name
+
+
+def _non_negative_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("request delay must be a number") from error
+    if not math.isfinite(parsed) or parsed < 0:
+        raise argparse.ArgumentTypeError("request delay must be a finite non-negative number")
+    return parsed
 
 
 def _resolve_experiment(value: Path, root: Path) -> Path:

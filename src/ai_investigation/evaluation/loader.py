@@ -20,6 +20,16 @@ EXECUTION_STATUSES = {
     "refused",
     "provider_failure",
 }
+ROBUSTNESS_CATEGORIES = {
+    "wording_variation",
+    "evidence_reordering",
+    "distractor",
+    "missing_evidence",
+    "conflicting_evidence",
+    "unsupported_cause",
+    "supported_generalization",
+    "duplicate_evidence",
+}
 
 
 def load_scenarios(path: Path) -> tuple[EvaluationScenario, ...]:
@@ -60,6 +70,7 @@ def _parse_scenario(item: object, index: int, path: Path) -> EvaluationScenario:
     expected_diagnosis_id = item.get("expected_diagnosis_id")
     expected_should_abstain = item.get("expected_should_abstain")
     expected_execution_status = item.get("expected_execution_status")
+    robustness_categories = item.get("robustness_categories", [])
 
     if not isinstance(scenario_id, str) or not scenario_id:
         raise ValueError(f"Scenario {index} in {path} requires a non-empty string id")
@@ -105,6 +116,13 @@ def _parse_scenario(item: object, index: int, path: Path) -> EvaluationScenario:
         and expected_execution_status not in EXECUTION_STATUSES
     ):
         raise ValueError(f"Scenario {scenario_id} has invalid expected_execution_status")
+    if not isinstance(robustness_categories, list) or not all(
+        isinstance(category, str) and category in ROBUSTNESS_CATEGORIES
+        for category in robustness_categories
+    ):
+        raise ValueError(f"Scenario {scenario_id} has invalid robustness_categories")
+    if len(robustness_categories) != len(set(robustness_categories)):
+        raise ValueError(f"Scenario {scenario_id} has duplicate robustness_categories")
 
     return EvaluationScenario(
         id=scenario_id,
@@ -127,4 +145,5 @@ def _parse_scenario(item: object, index: int, path: Path) -> EvaluationScenario:
         expected_diagnosis_id=expected_diagnosis_id,
         expected_should_abstain=expected_should_abstain,
         expected_execution_status=expected_execution_status,
+        robustness_categories=tuple(robustness_categories),
     )
