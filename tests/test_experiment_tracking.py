@@ -14,6 +14,7 @@ from ai_investigation.evaluation.tracking import (
     build_record,
     compare_experiments,
     create_metadata,
+    experiment_to_json,
     events_to_jsonl,
     list_experiments,
     load_experiment,
@@ -139,6 +140,26 @@ def test_metadata_rejects_naive_time_and_filters_secret_configuration() -> None:
     assert "secret" not in repr(metadata)
 
 
+def test_llm_metadata_persists_prompt_and_schema_versions() -> None:
+    metadata = create_metadata(
+        investigator_mode="llm",
+        scenario_source="scenarios.json",
+        scenario_ids=("one",),
+        provider="groq",
+        model="llama-3.3-70b-versatile",
+        prompt_version="llm-investigator-v1",
+        response_schema_version="llm-decision-v1",
+        now=lambda: FIXED_TIME,
+        revision_resolver=lambda: None,
+        token_factory=lambda: "safe",
+    )
+
+    assert metadata.provider == "groq"
+    assert metadata.model == "llama-3.3-70b-versatile"
+    assert metadata.prompt_version == "llm-investigator-v1"
+    assert metadata.response_schema_version == "llm-decision-v1"
+
+
 def test_events_are_sequenced_and_capture_stage_timings(fixture_directory: Path) -> None:
     record = tracked_record(fixture_directory)
 
@@ -171,6 +192,23 @@ def test_persistence_creates_artifacts_round_trips_and_refuses_overwrite(
     assert load_experiment(path) == record
     with pytest.raises(ExperimentPersistenceError, match="Could not persist"):
         save_experiment(record, "again", root)
+
+
+def test_old_experiment_without_prompt_metadata_remains_readable(
+    fixture_directory: Path,
+    tmp_path: Path,
+) -> None:
+    value = json.loads(experiment_to_json(tracked_record(fixture_directory)))
+    value["metadata"].pop("prompt_version")
+    value["metadata"].pop("response_schema_version")
+    artifact = tmp_path / "experiment.json"
+    artifact.write_text(json.dumps(value), encoding="utf-8")
+
+    loaded = load_experiment(artifact)
+
+    assert loaded.metadata.prompt_version is None
+    assert loaded.metadata.response_schema_version is None
+    assert compare_experiments(loaded, tracked_record(fixture_directory)).summary.regressed == 0
 
 
 def test_listing_skips_malformed_experiments(fixture_directory: Path, tmp_path: Path) -> None:
@@ -351,3 +389,49 @@ def test_evaluation_cli_saves_fake_model_experiment(
     assert record.metadata.provider == "fake-provider"
     assert record.metadata.model == "fake-model-v1"
     assert "Experiment ID:" in capsys.readouterr().out
+
+
+def test_deterministic_and_llm_experiments_compare_without_special_cases(
+    fixture_directory: Path,
+) -> None:
+    baseline = tracked_record(fixture_directory)
+    selected = (load_scenarios(fixture_directory / "evaluation_scenarios.json")[0],)
+    metadata = create_metadata(
+        investigator_mode="llm",
+        scenario_source="tests/fixtures/evaluation_scenarios.json",
+        scenario_ids=(selected[0].id,),
+        provider="groq",
+        model="llama-3.3-70b-versatile",
+        prompt_version="llm-investigator-v1",
+        now=lambda: FIXED_TIME,
+        revision_resolver=lambda: None,
+        token_factory=lambda: "llm",
+    )
+    recorder = EventRecorder(metadata.experiment_id, lambda: FIXED_TIME)
+    collector, investigator = dependencies(fixture_directory)
+    response = json.dumps(
+        {
+            "outcome": "diagnosis",
+            "diagnosis_id": "health_check_timeout",
+            "confidence": 0.8,
+            "evidence_references": [1, 2, 3],
+            "abstention_reason": None,
+        }
+    )
+    report = run_experiment(
+        selected,
+        collector,
+        investigator,
+        investigator_mode="llm",
+        structured_model=FakeModel(response),
+        clock=IncrementingClock(),
+        observer=recorder,
+    )
+    candidate = build_record(metadata, report, recorder.events)
+
+    comparison = compare_experiments(baseline, candidate)
+
+    assert comparison.summary.regressed == 0
+    assert comparison.summary.unchanged_correct == 1
+    assert comparison.candidate.provider == "groq"
+    assert comparison.candidate.prompt_version == "llm-investigator-v1"

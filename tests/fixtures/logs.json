@@ -61,5 +61,60 @@
     "deployment_id": "deploy-1052",
     "level": "error",
     "message": "Migration failed"
+  },
+  {
+    "deployment_id": "deploy-1053",
+    "level": "error",
+    "message": "The service could not initialize because no database connection string was available in the runtime configuration."
+  },
+  {
+    "deployment_id": "deploy-1054",
+    "level": "error",
+    "message": "Connection pool reached maximum capacity."
+  },
+  {
+    "deployment_id": "deploy-1054",
+    "level": "error",
+    "message": "A reporting query remained active for 18 minutes."
+  },
+  {
+    "deployment_id": "deploy-1054",
+    "level": "error",
+    "message": "The schema update waited for a database lock."
+  },
+  {
+    "deployment_id": "deploy-1054",
+    "level": "error",
+    "message": "The deployment health check timed out while startup remained blocked."
+  },
+  {
+    "deployment_id": "deploy-1055",
+    "level": "error",
+    "message": "Deployment process exited with status 1."
+  },
+  {
+    "deployment_id": "deploy-1056",
+    "level": "error",
+    "message": "Runtime verification confirmed that the database connection string was present."
+  },
+  {
+    "deployment_id": "deploy-1056",
+    "level": "error",
+    "message": "Startup reported that no database connection string was available."
+  },
+  {
+    "deployment_id": "deploy-1057",
+    "level": "error",
+    "message": "Optional metrics exporter could not reach its collector."
+  },
+  {
+    "deployment_id": "deploy-1057",
+    "level": "error",
+    "message": "Required environment variable DATABASE_URL is not set"
+  },
+  {
+    "deployment_id": "deploy-1057",
+    "level": "error",
+    "message": "Deprecated cache setting will be removed in a future release."
   }
 ]

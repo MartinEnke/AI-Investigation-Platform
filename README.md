@@ -1,9 +1,9 @@
 # AI Investigation Platform
 
 ![Python 3.13+](https://img.shields.io/badge/Python-3.13%2B-3776AB)
-![Tests](https://img.shields.io/badge/tests-141%20passing-2E8B57)
-![Evaluation scenarios](https://img.shields.io/badge/evaluations-11%20passing-2E8B57)
-![Milestone 9](https://img.shields.io/badge/milestone-9-6C63FF)
+![Tests](https://img.shields.io/badge/tests-166%20passing-2E8B57)
+![Evaluation scenarios](https://img.shields.io/badge/evaluations-16%20scenarios-2E8B57)
+![Milestone 10](https://img.shields.io/badge/milestone-10-6C63FF)
 ![Architecture](https://img.shields.io/badge/architecture-deterministic--first-555555)
 
 Exploring how reliable AI systems are engineered—through deterministic evidence collection, explicit evaluation, progressive orchestration, and explainable investigations.
@@ -33,8 +33,9 @@ That makes this domain a useful miniature of a broader AI system.
 
 ## Current Implementation
 
-Milestone 9 evolves local experiment tracking into scenario-level comparative evaluation and an
-automation-ready semantic regression gate.
+Milestone 10 adds a controlled probabilistic investigator as an experimental alternative to the
+deterministic baseline. It changes the reasoning mechanism while preserving evidence collection,
+validation, evaluation, experiment tracking, and scenario comparison.
 
 It currently includes:
 
@@ -50,13 +51,15 @@ It currently includes:
 - an immutable, machine-readable decision trace;
 - shared deterministic evidence collection for both reasoning paths;
 - strict structured LLM parsing and evidence-reference validation;
-- an isolated `gemini-2.5-flash` adapter;
+- a common investigator contract over already-collected evidence;
+- isolated Gemini and Groq structured-model adapters;
+- a versioned, deterministic LLM prompt and strict response schema;
 - a command-line interface;
 - structured scenario results, aggregate metrics, and text or JSON evaluation reports;
 - local experiment metadata, stage events, timing, persistence, inspection, and comparison;
 - typed scenario changes, failure categories, multidimensional deltas, and recommendations;
-- 141 passing tests;
-- 11 passing synthetic evaluation scenarios.
+- 166 passing tests (plus one opt-in provider test skipped by default);
+- 11 established regression scenarios and 5 Milestone 10 generalization scenarios.
 
 The supported diagnosis rules are intentionally narrow:
 
@@ -64,9 +67,9 @@ The supported diagnosis rules are intentionally narrow:
 2. Missing required environment variable
 3. Database migration failure
 
-The deterministic CLI, tests, and evaluation make no network or model calls. Real Gemini execution
-is optional and credential-gated. There are no agents, graph frameworks, retries, provider routing,
-or hidden probabilistic fallbacks.
+The deterministic CLI, tests, and evaluation make no network or model calls. Real Gemini and Groq
+execution is optional and credential-gated. There are no agents, graph frameworks, retries,
+provider routing, or hidden probabilistic fallbacks.
 
 ## Architecture
 
@@ -84,7 +87,7 @@ Evidence Collection ──> CollectedEvidence
                             │
               ┌─────────────┴─────────────┐
               v                           v
-Deterministic Diagnosis             Gemini Interpretation
+Deterministic Diagnosis             LLM Interpretation
        │                                  │
        v                                  v
 Decision Trace                    Parsing + Reference Validation
@@ -195,6 +198,30 @@ uncalibrated.
 Milestone 6 used that baseline for one unchanged `gemini-2.5-flash` comparison run. The complete
 scenario-level results and limitations are preserved in the
 [Milestone 6 benchmark report](docs/experiments/milestone-06-gemini-benchmark.md).
+
+### Controlled Probabilistic Investigator
+
+Milestone 10 introduces the LLM path now because exact deterministic rules do not generalize
+automatically to unfamiliar language or multi-step causal evidence. The deterministic investigator
+remains intact: probabilistic reasoning must demonstrate measured improvements without adding
+unsupported conclusions, unsafe failures to abstain, or invalid evidence references.
+
+Both implementations satisfy one application-facing contract over the same immutable
+`CollectedEvidence`. The LLM receives only the question, deployment identifier, numbered evidence,
+supported decision IDs, and response schema. It never receives benchmark expectations,
+deterministic output, or comparison results.
+
+The prompt is pure, deterministic, and identified as `llm-investigator-v1`. Structured output is
+validated again in application code even when a provider offers JSON constraints. Unknown
+diagnoses, contradictory fields, invalid confidence, malformed JSON, and nonexistent references
+remain explicit failures. No retries are used because raw provider reliability is itself an
+experimental result.
+
+Groq is a single small transport adapter behind the existing `StructuredModel` protocol, not a
+provider platform. The extended 16-scenario set adds semantic rephrasing, multi-step causal
+synthesis, unsupported evidence, conflicting evidence, and distractors without rewriting the
+original 11 cases. The deterministic path scores 14/16 on semantic correctness in that extended
+set; no real Groq benchmark result is claimed here.
 
 ## Local Experiment Tracking
 
@@ -361,7 +388,8 @@ Limitations are empty for this supported diagnosis. Inconclusive results render 
 ├── pyproject.toml
 ├── docs/
 │   ├── architecture/
-│   │   └── milestone-06-deterministic-vs-llm.md
+│   │   ├── milestone-06-deterministic-vs-llm.md
+│   │   └── milestone-10-controlled-probabilistic-investigator.md
 │   └── experiments/
 │       ├── milestone-06-gemini-benchmark.md
 │       ├── milestone-7-deterministic-baseline.md
@@ -376,7 +404,9 @@ Limitations are empty for this supported diagnosis. Inconclusive results render 
 │       ├── experiments.py
 │       ├── evidence.py
 │       ├── gemini_model.py
+│       ├── groq_model.py
 │       ├── investigator.py
+│       ├── investigators.py
 │       ├── llm_investigator.py
 │       ├── models.py
 │       ├── evaluation/
@@ -403,12 +433,16 @@ Limitations are empty for this supported diagnosis. Inconclusive results render 
     ├── test_experiment_evaluation.py
     ├── test_experiment_tracking.py
     ├── test_gemini_model.py
+    ├── test_groq_integration.py
+    ├── test_groq_model.py
     ├── test_investigator.py
     ├── test_llm_investigator.py
+    ├── test_milestone10.py
     ├── test_tools.py
     └── fixtures/
         ├── deployments.json
         ├── evaluation_scenarios.json
+        ├── evaluation_scenarios_m10.json
         ├── logs.json
         └── service_health.json
 ```
@@ -482,6 +516,44 @@ Run the controlled evaluation suite:
 python -m ai_investigation.evaluation.runner \
   tests/fixtures/evaluation_scenarios.json \
   --fixtures tests/fixtures
+```
+
+Run the extended deterministic benchmark:
+
+```bash
+python -m ai_investigation.evaluate \
+  --investigator deterministic \
+  --scenarios tests/fixtures/evaluation_scenarios_m10.json
+```
+
+Run the same extended benchmark through Groq explicitly:
+
+```bash
+export GROQ_API_KEY="your-api-key"
+export AI_INVESTIGATION_PROVIDER=groq
+export AI_INVESTIGATION_MODEL=llama-3.3-70b-versatile
+python -m ai_investigation.evaluate \
+  --investigator llm \
+  --provider groq \
+  --model llama-3.3-70b-versatile \
+  --scenarios tests/fixtures/evaluation_scenarios_m10.json \
+  --save-experiment
+```
+
+The real-provider smoke test is skipped by default and makes at most one request when enabled:
+
+```bash
+RUN_LLM_INTEGRATION_TESTS=1 pytest -m llm_integration
+```
+
+It consumes provider quota. Ordinary tests use fake structured models and require neither the
+Groq SDK nor an API key. Compare a stored deterministic run with a stored LLM run using the same
+existing command and regression policy:
+
+```bash
+python -m ai_investigation.experiments compare \
+  <deterministic-experiment-id> <llm-experiment-id> \
+  --fail-on-regression
 ```
 
 Run the Milestone 7 deterministic evaluation with a human-readable report:
@@ -574,9 +646,11 @@ Completed
         │
         v
   scenario-level comparison and semantic regression gate
+        │
+        v
+  controlled probabilistic investigator and Groq experiment path
 
 Possible directions
-  ├── probabilistic investigation beside the deterministic baseline
   ├── graph orchestration if branching complexity justifies it
   ├── external evidence integrations
   ├── MCP if interoperability creates concrete value
@@ -594,7 +668,7 @@ The project currently:
 - covers a deliberately small deployment-failure domain;
 - supports three deterministic diagnosis patterns;
 - has no production evidence integrations;
-- has one experimental Gemini adapter rather than a production probabilistic investigator;
+- has experimental Gemini and Groq adapters rather than a production probabilistic investigator;
 - has no retry, fallback, or semantic-validation policy for model output;
 - does not measure performance against real incident data.
 

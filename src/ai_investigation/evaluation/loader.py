@@ -9,6 +9,8 @@ DIAGNOSIS_IDS = {
     "health_check_timeout",
     "missing_environment_variable",
     "database_migration_failure",
+    "missing_database_configuration",
+    "database_contention_blocked_migration",
 }
 EXECUTION_STATUSES = {
     "completed",
@@ -23,10 +25,19 @@ EXECUTION_STATUSES = {
 def load_scenarios(path: Path) -> tuple[EvaluationScenario, ...]:
     with path.open(encoding="utf-8") as fixture:
         data = json.load(fixture)
+    included: tuple[EvaluationScenario, ...] = ()
+    if isinstance(data, dict):
+        include = data.get("include")
+        data = data.get("scenarios")
+        if not isinstance(include, str) or not include:
+            raise ValueError(f"Scenario collection in {path} requires a non-empty include")
+        included = load_scenarios(path.parent / include)
     if not isinstance(data, list):
         raise ValueError(f"Expected a list of evaluation scenarios in {path}")
 
-    scenarios = tuple(_parse_scenario(item, index, path) for index, item in enumerate(data))
+    scenarios = included + tuple(
+        _parse_scenario(item, index, path) for index, item in enumerate(data)
+    )
     ids = [scenario.id for scenario in scenarios]
     if len(ids) != len(set(ids)):
         raise ValueError(f"Evaluation scenario IDs must be unique in {path}")

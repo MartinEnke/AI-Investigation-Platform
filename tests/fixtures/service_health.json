@@ -13,5 +13,15 @@
     "service": "profile-api",
     "status": "healthy",
     "detail": "Readiness endpoint returned HTTP 200."
+  },
+  {
+    "service": "analytics-api",
+    "status": "unhealthy",
+    "detail": "Startup remained blocked while the database lock was held."
+  },
+  {
+    "service": "orders-api",
+    "status": "unknown",
+    "detail": "No health response was recorded before the process exited."
   }
 ]

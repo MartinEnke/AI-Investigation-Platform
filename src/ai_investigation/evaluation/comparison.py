@@ -87,6 +87,7 @@ class ExperimentIdentity:
     provider: str | None
     model: str | None
     scenario_count: int
+    prompt_version: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -404,6 +405,7 @@ def _identity(record: "ExperimentRecord") -> ExperimentIdentity:
         provider=metadata.provider,
         model=metadata.model,
         scenario_count=metadata.scenario_count,
+        prompt_version=metadata.prompt_version,
     )
 
 
@@ -488,7 +490,7 @@ def _median_latency(report: EvaluationReport) -> float | None:
 
 
 def _validation_failure_count(report: EvaluationReport) -> float | None:
-    if not any(result.investigator == "gemini" for result in report.scenarios):
+    if not any(result.investigator in ("gemini", "llm") for result in report.scenarios):
         return None
     return float(report.aggregate.invalid_responses + report.aggregate.invalid_references)
 
@@ -644,4 +646,12 @@ def _render_category_counts(counts: tuple[tuple[str, int], ...]) -> str:
 
 def _identity_label(identity: ExperimentIdentity) -> str:
     provider = "/".join(item for item in (identity.provider, identity.model) if item)
-    return f"{identity.investigator_mode} ({provider})" if provider else identity.investigator_mode
+    details = ", ".join(
+        item
+        for item in (
+            provider or None,
+            f"prompt={identity.prompt_version}" if identity.prompt_version else None,
+        )
+        if item
+    )
+    return f"{identity.investigator_mode} ({details})" if details else identity.investigator_mode

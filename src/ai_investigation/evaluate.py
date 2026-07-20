@@ -24,7 +24,12 @@ from ai_investigation.evaluation.tracking import (
 )
 from ai_investigation.evidence import EvidenceCollector
 from ai_investigation.investigator import DeploymentFailureInvestigator
-from ai_investigation.llm_investigator import ModelProviderError, StructuredModel
+from ai_investigation.llm_investigator import (
+    ModelProviderError,
+    PROMPT_VERSION,
+    RESPONSE_SCHEMA_VERSION,
+    StructuredModel,
+)
 from ai_investigation.tools import JsonDeploymentTool, JsonLogTool, JsonServiceHealthTool
 
 
@@ -52,6 +57,23 @@ def _gemini_model() -> StructuredModel:
     )
 
 
+def _groq_model(
+    model_name: str | None = None,
+    provider_name: str | None = None,
+) -> StructuredModel:
+    from ai_investigation.groq_model import DEFAULT_GROQ_MODEL, GroqStructuredModel
+
+    provider = provider_name or os.environ.get("AI_INVESTIGATION_PROVIDER", "groq")
+    if provider != "groq":
+        raise ValueError(f"Unsupported LLM provider: {provider}.")
+    selected_model = (
+        model_name
+        or os.environ.get("AI_INVESTIGATION_MODEL")
+        or DEFAULT_GROQ_MODEL
+    )
+    return GroqStructuredModel(os.environ.get("GROQ_API_KEY", ""), selected_model)
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
@@ -61,10 +83,12 @@ def main(
     parser = argparse.ArgumentParser(description="Evaluate investigation behavior.")
     parser.add_argument(
         "--investigator",
-        choices=("deterministic", "gemini", "both"),
+        choices=("deterministic", "gemini", "llm", "both"),
         default="deterministic",
     )
     parser.add_argument("--format", choices=("text", "json"), default="text")
+    parser.add_argument("--provider", choices=("groq",))
+    parser.add_argument("--model")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--save-experiment", action="store_true")
     parser.add_argument("--experiment-dir", type=Path, default=root / "experiments" / "runs")
@@ -87,6 +111,10 @@ def main(
         model = structured_model
         if args.investigator in ("gemini", "both") and model is None:
             model = _gemini_model()
+        elif args.investigator == "llm" and model is None:
+            if args.provider not in (None, "groq"):
+                raise ValueError(f"Unsupported LLM provider: {args.provider}.")
+            model = _groq_model(args.model, args.provider)
         collector, deterministic = _dependencies(args.fixtures)
         scenarios = load_scenarios(args.scenarios)
         tracking_enabled = args.save_experiment or args.compare_to is not None
@@ -97,9 +125,25 @@ def main(
                 scenario_ids=tuple(scenario.id for scenario in scenarios),
                 provider=getattr(model, "provider_name", None),
                 model=getattr(model, "model_name", None),
-                configuration=(("format", args.format),),
+                configuration=tuple(
+                    (key, value)
+                    for key, value in (
+                        ("format", args.format),
+                        ("provider", args.provider),
+                        ("model", args.model),
+                    )
+                    if value is not None
+                ),
                 tags=tuple(args.tag),
                 notes=args.notes,
+                prompt_version=(
+                    PROMPT_VERSION if args.investigator in ("gemini", "both", "llm") else None
+                ),
+                response_schema_version=(
+                    RESPONSE_SCHEMA_VERSION
+                    if args.investigator in ("gemini", "both", "llm")
+                    else None
+                ),
             )
             if tracking_enabled
             else None

@@ -54,7 +54,7 @@ class ScenarioRunResult:
     """Independent evaluation dimensions for one investigator and scenario."""
 
     scenario_id: str
-    investigator: Literal["deterministic", "gemini"]
+    investigator: Literal["deterministic", "gemini", "llm"]
     execution_status: str
     expected_execution_status: str | None
     execution_status_matches: bool | None
@@ -107,7 +107,7 @@ class AggregateMetrics:
 class EvaluationReport:
     """A complete reusable experiment report without provider-specific fields."""
 
-    investigator_mode: Literal["deterministic", "gemini", "both"]
+    investigator_mode: Literal["deterministic", "gemini", "llm", "both"]
     scenarios: tuple[ScenarioRunResult, ...]
     aggregate: AggregateMetrics
     confidence_disclaimer: str = "Model confidence is self-reported and uncalibrated."

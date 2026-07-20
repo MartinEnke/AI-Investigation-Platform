@@ -66,6 +66,8 @@ class ExperimentMetadata:
     configuration: tuple[tuple[str, str], ...]
     tags: tuple[str, ...]
     notes: str | None
+    prompt_version: str | None = None
+    response_schema_version: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,6 +165,8 @@ def create_metadata(
     configuration: tuple[tuple[str, str], ...] = (),
     tags: tuple[str, ...] = (),
     notes: str | None = None,
+    prompt_version: str | None = None,
+    response_schema_version: str | None = None,
     now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     revision_resolver: Callable[[], str | None] = lambda: resolve_git_revision(),
     token_factory: Callable[[], str] = lambda: secrets.token_hex(3),
@@ -193,6 +197,10 @@ def create_metadata(
         configuration=safe_configuration,
         tags=tags,
         notes=notes,
+        prompt_version=(prompt_version if investigator_mode != "deterministic" else None),
+        response_schema_version=(
+            response_schema_version if investigator_mode != "deterministic" else None
+        ),
     )
 
 

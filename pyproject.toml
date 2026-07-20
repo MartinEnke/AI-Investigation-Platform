@@ -17,6 +17,9 @@ experiment = ["google-genai>=2.12,<3"]
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+markers = [
+  "llm_integration: opt-in test that consumes real provider quota",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

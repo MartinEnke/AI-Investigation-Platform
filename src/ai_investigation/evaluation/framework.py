@@ -15,15 +15,18 @@ from ai_investigation.evaluation.models import (
 )
 from ai_investigation.evidence import CollectedEvidence, EvidenceCollector
 from ai_investigation.investigator import DeploymentFailureInvestigator, request_from_question
+from ai_investigation.investigators import (
+    DeterministicInvestigatorAdapter,
+    InvestigatorExecution,
+    LLMInvestigatorAdapter,
+)
 from ai_investigation.llm_investigator import (
-    LLMInvestigationFailure,
-    LLMInvestigationSuccess,
     LLMInvestigator,
     StructuredModel,
 )
 from ai_investigation.models import InvestigationResult
 
-InvestigatorMode = Literal["deterministic", "gemini", "both"]
+InvestigatorMode = Literal["deterministic", "gemini", "llm", "both"]
 EventObserver = Callable[
     [str, str | None, str | None, str, str, float | None, tuple[tuple[str, str], ...]],
     None,
@@ -42,18 +45,19 @@ def run_experiment(
 ) -> EvaluationReport:
     """Evaluate selected reasoning paths, sharing one evidence collection per scenario."""
 
-    if investigator_mode not in ("deterministic", "gemini", "both"):
+    if investigator_mode not in ("deterministic", "gemini", "llm", "both"):
         raise ValueError(f"Unknown investigator mode: {investigator_mode}.")
-    if investigator_mode in ("gemini", "both") and structured_model is None:
+    if investigator_mode in ("gemini", "llm", "both") and structured_model is None:
         raise ValueError("A structured model is required for Gemini evaluation.")
 
     selected_scenarios = tuple(scenarios)
     experiment_started = clock()
     _emit(observer, "experiment_started", None, None, "experiment", "started")
     results: list[ScenarioRunResult] = []
+    deterministic_adapter = DeterministicInvestigatorAdapter(deterministic_investigator)
     llm_investigator = (
-        LLMInvestigator(structured_model)
-        if structured_model is not None and investigator_mode in ("gemini", "both")
+        LLMInvestigatorAdapter(structured_model, LLMInvestigator(structured_model))
+        if structured_model is not None and investigator_mode in ("gemini", "llm", "both")
         else None
     )
 
@@ -93,7 +97,9 @@ def run_experiment(
                 "started",
             )
             started = clock()
-            investigation = deterministic_investigator.investigate_evidence(collected)
+            execution = deterministic_adapter.investigate(collected)
+            assert execution.result is not None
+            investigation = execution.result
             latency_ms = (clock() - started) * 1000
             _emit(
                 observer,
@@ -119,25 +125,26 @@ def run_experiment(
                 evaluation_duration,
             )
 
-        if investigator_mode in ("gemini", "both"):
+        if investigator_mode in ("gemini", "llm", "both"):
             assert llm_investigator is not None
+            model_investigator_name = "llm" if investigator_mode == "llm" else "gemini"
             _emit(
                 observer,
                 "model_investigation_started",
                 scenario.id,
-                "gemini",
+                model_investigator_name,
                 "investigation",
                 "started",
             )
             started = clock()
             outcome = llm_investigator.investigate(collected)
             latency_ms = (clock() - started) * 1000
-            outcome_status = "completed" if isinstance(outcome, LLMInvestigationSuccess) else outcome.status
+            outcome_status = outcome.status
             _emit(
                 observer,
                 "model_investigation_completed",
                 scenario.id,
-                "gemini",
+                model_investigator_name,
                 "investigation",
                 outcome_status,
                 latency_ms,
@@ -146,12 +153,17 @@ def run_experiment(
                 observer,
                 "validation_completed",
                 scenario.id,
-                "gemini",
+                model_investigator_name,
                 "validation",
                 outcome_status,
             )
             evaluation_started = clock()
-            model_result = _evaluate_model(scenario, outcome, latency_ms)
+            model_result = _evaluate_model(
+                scenario,
+                outcome,
+                latency_ms,
+                investigator=model_investigator_name,
+            )
             evaluation_duration = (clock() - evaluation_started) * 1000
             event_type = (
                 "scenario_failed"
@@ -162,7 +174,7 @@ def run_experiment(
                 observer,
                 event_type,
                 scenario.id,
-                "gemini",
+                model_investigator_name,
                 "evaluation",
                 model_result.semantic_correctness_status,
                 evaluation_duration,
@@ -299,7 +311,7 @@ def render_text_report(report: EvaluationReport) -> str:
                 aggregate.agreement_cases,
             )
         )
-    if report.investigator_mode in ("gemini", "both"):
+    if report.investigator_mode in ("gemini", "llm", "both"):
         lines.extend((f"Confidence: {report.confidence_disclaimer}", ""))
     else:
         lines.append("")
@@ -348,32 +360,32 @@ def _evaluate_deterministic(
 
 def _evaluate_model(
     scenario: EvaluationScenario,
-    outcome: LLMInvestigationSuccess | LLMInvestigationFailure,
+    outcome: InvestigatorExecution,
     latency_ms: float,
+    *,
+    investigator: Literal["gemini", "llm"] = "gemini",
 ) -> ScenarioRunResult:
-    if isinstance(outcome, LLMInvestigationSuccess):
+    if outcome.result is not None:
         return _scenario_result(
             scenario=scenario,
-            investigator="gemini",
+            investigator=investigator,
             execution_status="completed",
-            actual_diagnosis_id=outcome.decision.diagnosis_id,
-            actual_abstention=outcome.decision.outcome == "abstain",
+            actual_diagnosis_id=outcome.diagnosis_id,
+            actual_abstention=outcome.result.root_cause is None,
             evidence_references_valid=True,
             structured_response_valid=True,
             referenced_sources=tuple(item.source for item in outcome.result.evidence),
-            confidence=outcome.decision.confidence,
+            confidence=outcome.result.confidence,
             latency_ms=latency_ms,
             error=None,
         )
 
-    structured_valid = False if outcome.status == "invalid_response" else None
-    references_valid = False if outcome.status == "invalid_references" else None
-    if outcome.status == "invalid_references":
-        structured_valid = True
+    structured_valid = outcome.structured_response_valid
+    references_valid = outcome.evidence_references_valid
     actual_abstention = True if outcome.status == "not_evaluated" else None
     return _scenario_result(
         scenario=scenario,
-        investigator="gemini",
+        investigator=investigator,
         execution_status=outcome.status,
         actual_diagnosis_id=None,
         actual_abstention=actual_abstention,
@@ -389,7 +401,7 @@ def _evaluate_model(
 def _scenario_result(
     *,
     scenario: EvaluationScenario,
-    investigator: Literal["deterministic", "gemini"],
+    investigator: Literal["deterministic", "gemini", "llm"],
     execution_status: str,
     actual_diagnosis_id: str | None,
     actual_abstention: bool | None,
@@ -525,20 +537,20 @@ def _aggregate(
     agreements = tuple(
         result
         for result in results
-        if result.investigator == "gemini"
+        if result.investigator in ("gemini", "llm")
         and result.deterministic_model_agreement is not None
     )
     correct_confidence = tuple(
         result.confidence
         for result in results
-        if result.investigator == "gemini"
+        if result.investigator in ("gemini", "llm")
         and result.semantic_correctness_status == "correct"
         and result.confidence is not None
     )
     incorrect_confidence = tuple(
         result.confidence
         for result in results
-        if result.investigator == "gemini"
+        if result.investigator in ("gemini", "llm")
         and result.semantic_correctness_status == "incorrect"
         and result.confidence is not None
     )

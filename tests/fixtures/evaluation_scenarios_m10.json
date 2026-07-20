@@ -1,0 +1,55 @@
+{
+  "include": "evaluation_scenarios.json",
+  "scenarios": [
+    {
+      "id": "generalization-missing-database-configuration",
+      "question": "Why did deployment deploy-1053 fail?",
+      "expected_root_cause": "The deployment failed because required database connection configuration was missing.",
+      "expected_inconclusive": false,
+      "expected_diagnosis_id": "missing_database_configuration",
+      "expected_should_abstain": false,
+      "expected_evidence_sources": ["deployment", "logs"]
+    },
+    {
+      "id": "causal-database-contention",
+      "question": "Why did deployment deploy-1054 fail?",
+      "expected_root_cause": "The deployment migration was blocked by database contention.",
+      "expected_inconclusive": false,
+      "expected_diagnosis_id": "database_contention_blocked_migration",
+      "expected_should_abstain": false,
+      "expected_evidence_sources": [
+        "deployment",
+        "logs",
+        "logs",
+        "logs",
+        "logs",
+        "service_health"
+      ]
+    },
+    {
+      "id": "generalization-unsupported-cause",
+      "question": "Why did deployment deploy-1055 fail?",
+      "expected_root_cause": null,
+      "expected_inconclusive": true,
+      "expected_should_abstain": true,
+      "expected_evidence_sources": ["deployment", "logs", "service_health"]
+    },
+    {
+      "id": "generalization-conflicting-evidence",
+      "question": "Why did deployment deploy-1056 fail?",
+      "expected_root_cause": null,
+      "expected_inconclusive": true,
+      "expected_should_abstain": true,
+      "expected_evidence_sources": ["deployment", "logs", "logs"]
+    },
+    {
+      "id": "generalization-distractor-evidence",
+      "question": "Why did deployment deploy-1057 fail?",
+      "expected_root_cause": "The deployment failed because required environment variable DATABASE_URL was missing.",
+      "expected_inconclusive": false,
+      "expected_diagnosis_id": "missing_environment_variable",
+      "expected_should_abstain": false,
+      "expected_evidence_sources": ["deployment", "logs"]
+    }
+  ]
+}

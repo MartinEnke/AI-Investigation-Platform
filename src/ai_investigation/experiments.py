@@ -107,6 +107,7 @@ def _render_record(record, path: Path, show_events: bool) -> str:
         f"Investigator: {metadata.investigator_mode}",
         f"Provider: {metadata.provider or 'none'}",
         f"Model: {metadata.model or 'none'}",
+        f"Prompt version: {metadata.prompt_version or 'none'}",
         f"Scenarios: {metadata.scenario_count}",
         f"Revision: {metadata.repository_revision or 'unavailable'}",
         f"Tags: {', '.join(metadata.tags) or 'none'}",

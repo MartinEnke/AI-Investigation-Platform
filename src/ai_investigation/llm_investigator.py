@@ -12,6 +12,8 @@ DiagnosisId = Literal[
     "health_check_timeout",
     "missing_environment_variable",
     "database_migration_failure",
+    "missing_database_configuration",
+    "database_contention_blocked_migration",
 ]
 AbstentionReason = Literal[
     "insufficient_evidence",
@@ -23,7 +25,11 @@ DIAGNOSIS_IDS = (
     "health_check_timeout",
     "missing_environment_variable",
     "database_migration_failure",
+    "missing_database_configuration",
+    "database_contention_blocked_migration",
 )
+PROMPT_VERSION = "llm-investigator-v1"
+RESPONSE_SCHEMA_VERSION = "llm-decision-v1"
 ABSTENTION_REASONS = (
     "insufficient_evidence",
     "conflicting_evidence",
@@ -40,6 +46,8 @@ REQUIRED_EVIDENCE_SOURCES = {
     "health_check_timeout": {"deployment", "logs", "service_health"},
     "missing_environment_variable": {"deployment", "logs"},
     "database_migration_failure": {"deployment", "logs"},
+    "missing_database_configuration": {"deployment", "logs"},
+    "database_contention_blocked_migration": {"deployment", "logs"},
 }
 LLM_RESPONSE_JSON_SCHEMA = {
     "type": "object",
@@ -130,9 +138,33 @@ LLMInvestigationOutcome = LLMInvestigationSuccess | LLMInvestigationFailure
 def build_prompt(collected: CollectedEvidence) -> str:
     """Serialize the complete collected input and ordered evidence references."""
 
+    payload = serialize_evidence(collected)
+    return (
+        f"Prompt version: {PROMPT_VERSION}. Interpret only the supplied deployment evidence. "
+        "Do not invent or request additional evidence. Never use external assumptions. "
+        "Choose one supported diagnosis only when the supplied evidence supports it; otherwise "
+        "abstain when evidence is insufficient, contradictory, or unsupported. Cite exact numbered "
+        "evidence references. Confidence represents uncertainty and must be between 0.0 and 1.0. "
+        "Return only the requested JSON object; do not provide hidden reasoning.\n\n"
+        "Supported diagnosis IDs: health_check_timeout, missing_environment_variable, "
+        "database_migration_failure, missing_database_configuration, "
+        "database_contention_blocked_migration.\n"
+        "Abstention reasons: insufficient_evidence, conflicting_evidence, low_confidence.\n"
+        f"Response schema version: {RESPONSE_SCHEMA_VERSION}.\n"
+        "Response JSON schema:\n"
+        f"{json.dumps(LLM_RESPONSE_JSON_SCHEMA, sort_keys=True, separators=(',', ':'))}\n\n"
+        f"Collected evidence:\n{json.dumps(payload, sort_keys=True, separators=(',', ':'))}"
+    )
+
+
+def serialize_evidence(collected: CollectedEvidence) -> dict[str, object]:
+    """Return stable JSON-compatible evidence without evaluation metadata."""
+
     payload = {
-        "question": collected.request.question,
-        "deployment_id": collected.request.deployment_id,
+        "request": {
+            "question": collected.request.question,
+            "deployment_id": collected.request.deployment_id,
+        },
         "deployment": dict(collected.deployment) if collected.deployment is not None else None,
         "error_logs": [dict(log) for log in collected.error_logs],
         "service_health": (
@@ -144,15 +176,7 @@ def build_prompt(collected: CollectedEvidence) -> str:
         ],
         "collection_limitations": list(collected.limitations),
     }
-    return (
-        "Interpret only the supplied deployment evidence. Do not invent or request additional "
-        "evidence. Choose one supported diagnosis or explicitly abstain. Cite only the numbered "
-        "evidence references. Confidence must be between 0.0 and 1.0.\n\n"
-        "Supported diagnosis IDs: health_check_timeout, missing_environment_variable, "
-        "database_migration_failure.\n"
-        "Abstention reasons: insufficient_evidence, conflicting_evidence, low_confidence.\n\n"
-        f"Collected evidence:\n{json.dumps(payload, sort_keys=True, separators=(',', ':'))}"
-    )
+    return payload
 
 
 def parse_decision(raw_response: str) -> LLMDecision:
@@ -342,5 +366,11 @@ def _root_cause(diagnosis_id: DiagnosisId) -> str:
         ),
         "database_migration_failure": (
             "The deployment failed because a database migration could not be applied."
+        ),
+        "missing_database_configuration": (
+            "The deployment failed because required database connection configuration was missing."
+        ),
+        "database_contention_blocked_migration": (
+            "The deployment migration was blocked by database contention."
         ),
     }[diagnosis_id]

@@ -64,5 +64,35 @@
     "service": "admin-api",
     "status": "failed",
     "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1053",
+    "service": "billing-api",
+    "status": "failed",
+    "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1054",
+    "service": "analytics-api",
+    "status": "failed",
+    "failed_stage": "migration"
+  },
+  {
+    "id": "deploy-1055",
+    "service": "orders-api",
+    "status": "failed",
+    "failed_stage": "rollout"
+  },
+  {
+    "id": "deploy-1056",
+    "service": "ledger-api",
+    "status": "failed",
+    "failed_stage": "startup"
+  },
+  {
+    "id": "deploy-1057",
+    "service": "warehouse-api",
+    "status": "failed",
+    "failed_stage": "startup"
   }
 ]
