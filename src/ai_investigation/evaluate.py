@@ -12,6 +12,7 @@ import time
 from dotenv import load_dotenv
 
 from ai_investigation.evaluation.framework import (
+    UncertaintyDebugTrace,
     render_text_report,
     report_to_json,
     run_experiment,
@@ -37,6 +38,13 @@ from ai_investigation.llm_investigator import (
     prompt_version_identifier,
 )
 from ai_investigation.tools import JsonDeploymentTool, JsonLogTool, JsonServiceHealthTool
+from ai_investigation.uncertainty_investigator import (
+    CANDIDATE_SEMANTICS_PROMPT_SELECTION,
+    DECISION_POLICY_VERSION,
+    UNCERTAINTY_PROMPT_SELECTION,
+    uncertainty_prompt_identifier,
+    uncertainty_schema_identifier,
+)
 
 
 def _repository_root() -> Path:
@@ -91,7 +99,7 @@ def main(
     parser = argparse.ArgumentParser(description="Evaluate investigation behavior.")
     parser.add_argument(
         "--investigator",
-        choices=("deterministic", "gemini", "llm", "both"),
+        choices=("deterministic", "gemini", "llm", "llm-policy", "both"),
         default="deterministic",
     )
     parser.add_argument("--format", choices=("text", "json"), default="text")
@@ -106,7 +114,13 @@ def main(
     )
     parser.add_argument(
         "--prompt-version",
-        choices=("v1", "v2", "v3"),
+        choices=(
+            "v1",
+            "v2",
+            "v3",
+            UNCERTAINTY_PROMPT_SELECTION,
+            CANDIDATE_SEMANTICS_PROMPT_SELECTION,
+        ),
         default=DEFAULT_PROMPT_VERSION,
     )
     parser.add_argument(
@@ -114,6 +128,11 @@ def main(
         type=_non_negative_float,
         default=0.0,
         help="Delay between provider-backed LLM scenario requests (default: 0).",
+    )
+    parser.add_argument(
+        "--debug-uncertainty",
+        action="store_true",
+        help="Print opt-in llm-policy routing and raw-response diagnostics to stderr.",
     )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--save-experiment", action="store_true")
@@ -137,10 +156,18 @@ def main(
         model = structured_model
         if args.investigator in ("gemini", "both") and model is None:
             model = _gemini_model()
-        elif args.investigator == "llm" and model is None:
+        elif args.investigator in ("llm", "llm-policy") and model is None:
             if args.provider not in (None, "groq"):
                 raise ValueError(f"Unsupported LLM provider: {args.provider}.")
             model = _groq_model(args.model, args.provider)
+        uncertainty_prompts = {
+            UNCERTAINTY_PROMPT_SELECTION,
+            CANDIDATE_SEMANTICS_PROMPT_SELECTION,
+        }
+        if args.investigator == "llm-policy" and args.prompt_version not in uncertainty_prompts:
+            raise ValueError("llm-policy requires an uncertainty prompt version.")
+        if args.investigator != "llm-policy" and args.prompt_version in uncertainty_prompts:
+            raise ValueError("Uncertainty prompts require --investigator llm-policy.")
         collector, deterministic = _dependencies(args.fixtures)
         scenarios = load_scenarios(args.scenarios)
         tracking_enabled = args.save_experiment or args.compare_to is not None
@@ -160,13 +187,13 @@ def main(
                         (
                             "prompt_version",
                             args.prompt_version
-                            if args.investigator in ("gemini", "both", "llm")
+                            if args.investigator in ("gemini", "both", "llm", "llm-policy")
                             else None,
                         ),
                         (
                             "request_delay_seconds",
                             str(args.request_delay_seconds)
-                            if args.investigator in ("gemini", "both", "llm")
+                            if args.investigator in ("gemini", "both", "llm", "llm-policy")
                             else None,
                         ),
                     )
@@ -175,13 +202,22 @@ def main(
                 tags=tuple(args.tag),
                 notes=args.notes,
                 prompt_version=(
-                    prompt_version_identifier(args.prompt_version)
+                    uncertainty_prompt_identifier(args.prompt_version)
+                    if args.investigator == "llm-policy"
+                    else prompt_version_identifier(args.prompt_version)
                     if args.investigator in ("gemini", "both", "llm")
                     else None
                 ),
                 response_schema_version=(
-                    RESPONSE_SCHEMA_VERSION
+                    uncertainty_schema_identifier(args.prompt_version)
+                    if args.investigator == "llm-policy"
+                    else RESPONSE_SCHEMA_VERSION
                     if args.investigator in ("gemini", "both", "llm")
+                    else None
+                ),
+                decision_policy_version=(
+                    DECISION_POLICY_VERSION
+                    if args.investigator == "llm-policy"
                     else None
                 ),
             )
@@ -189,6 +225,7 @@ def main(
             else None
         )
         recorder = EventRecorder(metadata.experiment_id) if metadata is not None else None
+        debug_traces: list[UncertaintyDebugTrace] = []
         report = run_experiment(
             scenarios,
             collector,
@@ -199,6 +236,9 @@ def main(
             request_delay_seconds=args.request_delay_seconds,
             sleep=sleep,
             observer=recorder,
+            uncertainty_debug=(
+                debug_traces.append if args.debug_uncertainty else None
+            ),
         )
         record = (
             build_record(metadata, report, recorder.events)
@@ -210,10 +250,21 @@ def main(
         return 2
 
     rendered = report_to_json(report) if args.format == "json" else render_text_report(report)
+    if args.format == "text" and args.investigator == "llm-policy":
+        rendered = (
+            "Uncertainty prompt routing\n"
+            f"Requested: {args.prompt_version}\n"
+            f"Resolved prompt: {uncertainty_prompt_identifier(args.prompt_version)}\n"
+            f"Resolved schema: {uncertainty_schema_identifier(args.prompt_version)}\n\n"
+            + rendered
+        )
     if args.output is not None:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(rendered, encoding="utf-8")
     print(rendered, end="")
+    if args.debug_uncertainty:
+        for trace in debug_traces:
+            print(_render_uncertainty_debug(trace), file=sys.stderr)
     if args.save_experiment and record is not None:
         try:
             stored = save_experiment(record, render_text_report(report), args.experiment_dir)
@@ -251,6 +302,29 @@ def _non_negative_float(value: str) -> float:
 
 def _resolve_experiment(value: Path, root: Path) -> Path:
     return value if value.exists() else root / value
+
+
+def _render_uncertainty_debug(trace: UncertaintyDebugTrace) -> str:
+    return "\n".join(
+        (
+            f"Uncertainty debug — {trace.scenario_id}",
+            f"Requested prompt: {trace.requested_prompt_version}",
+            f"Resolved prompt: {trace.resolved_prompt_identifier}",
+            f"Resolved schema: {trace.resolved_schema_version}",
+            "Raw provider response:",
+            trace.raw_provider_response or "none",
+            "Parsed supported candidates: "
+            + (", ".join(trace.parsed_supported_candidates) or "none"),
+            "Parsed rejected hypotheses: "
+            + (", ".join(trace.parsed_rejected_hypotheses) or "none"),
+            "Policy candidates: " + (", ".join(trace.policy_candidates) or "none"),
+            f"Policy outcome: {trace.policy_outcome or 'none'}",
+            "Evaluation supported candidates: "
+            + (", ".join(trace.evaluation_supported_candidates) or "none"),
+            "Evaluation rejected hypotheses: "
+            + (", ".join(trace.evaluation_rejected_hypotheses) or "none"),
+        )
+    )
 
 
 if __name__ == "__main__":

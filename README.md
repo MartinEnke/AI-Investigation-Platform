@@ -1,9 +1,9 @@
 # AI Investigation Platform
 
 ![Python 3.13+](https://img.shields.io/badge/Python-3.13%2B-3776AB)
-![Tests](https://img.shields.io/badge/tests-214%20passing-2E8B57)
+![Tests](https://img.shields.io/badge/tests-285%20passing-2E8B57)
 ![Holdout scenarios](https://img.shields.io/badge/holdout-20%20scenarios-2E8B57)
-![Milestone 12.2](https://img.shields.io/badge/milestone-12.2-6C63FF)
+![Milestone 12.3](https://img.shields.io/badge/milestone-12.3-6C63FF)
 ![Architecture](https://img.shields.io/badge/architecture-deterministic--first-555555)
 
 Exploring how reliable AI systems are engineered—through deterministic evidence collection, explicit evaluation, progressive orchestration, and explainable investigations.
@@ -58,10 +58,12 @@ It currently includes:
 - structured scenario results, aggregate metrics, and text or JSON evaluation reports;
 - local experiment metadata, stage events, timing, persistence, inspection, and comparison;
 - typed scenario changes, failure categories, multidimensional deltas, and recommendations;
-- 214 passing tests (plus one opt-in provider test skipped by default);
+- 285 passing tests (plus one opt-in provider test skipped by default);
 - 11 established regression scenarios and 5 Milestone 10 generalization scenarios.
 - a separate frozen 20-scenario Milestone 11 holdout benchmark.
-- an explicit immutable uncertainty model and disconnected deterministic decision policy.
+- an explicit immutable uncertainty model and deterministic decision policy;
+- a separate `llm-policy` experiment path in which the model proposes candidates but policy owns
+  the final outcome.
 
 The supported diagnosis rules are intentionally narrow:
 
@@ -349,7 +351,7 @@ four supported holdout diagnoses, while LLM v3 found every supported diagnosis b
 false diagnoses instead of abstaining. Milestone 12 treats this as a decision-policy problem rather
 than immediately changing the prompt or combining investigators.
 
-The new immutable domain layer represents supported candidates, supporting and contradicting
+The immutable domain layer represents supported candidates, supporting and contradicting
 evidence, source completeness, evidence strength, unsupported signals, conflicts, and insufficient
 evidence. A pure deterministic policy then returns one of three outcomes:
 
@@ -358,9 +360,64 @@ evidence. A pure deterministic policy then returns one of three outcomes:
 - `needs_review` when plausible supported candidates or material evidence remain unresolved.
 
 Evidence strength is deliberately distinct from reported confidence, and confidence does not drive
-the policy. This layer is not yet connected to either investigator, CLI, evaluator, or experiment
-comparison, so current outputs and benchmark scores remain unchanged. The design and full decision
-table are documented in the
+the policy. Milestone 12.3 connects this layer through a new, separately selectable `llm-policy`
+path while leaving the deterministic and frozen LLM v3 paths unchanged:
+
+```text
+Collected Evidence
+       │
+       v
+LLM uncertainty proposal
+       │
+       v
+Typed uncertainty adapter
+       │
+       v
+Deterministic decision policy
+       │
+       v
+diagnosis / abstention / needs_review
+       │
+       v
+Public InvestigationResult
+```
+
+The versioned `v4-uncertainty` prompt asks for zero, one, or multiple supported candidates,
+per-candidate supporting and contradicting references, evidence strength, reported confidence, and
+cross-candidate uncertainty flags. It explicitly does not ask the model to choose the final
+outcome. Evidence is exposed through exact request-local IDs such as `E1`, `E2`, and `E3`.
+Application code validates those identities and derives source coverage before applying the
+existing fixed policy.
+
+The model does not declare exact missing source types. Required sources come from diagnosis rules,
+available sources come from collected evidence, and deterministic code computes
+`missing_required_sources = required_sources - available_sources`. This keeps semantic uncertainty
+with the model while evidence identity and availability remain application-owned facts.
+
+The first valid live policy run then exposed a different semantic boundary: the model placed nearly
+every diagnosis it considered into the candidate list. Because policy correctly treats every
+candidate as independently supported, it returned review for 13 scenarios. The separately
+versioned `v4-uncertainty-candidate-semantics` contract now distinguishes policy-eligible
+`supported_candidates` from explainability-only `rejected_hypotheses`. Rejected hypotheses retain
+typed reasons and valid evidence IDs but never enter candidate counts, conflict state, or policy.
+This is a controlled proposal-contract correction; no improved benchmark result is claimed before
+a new live run.
+
+Milestone 12.4 hardens that contract by removing model-authored conflict state. The application now
+derives conflict exactly from the supported-candidate count, while legacy schema-v3 responses remain
+readable. Source-difference reporting also uses unique source categories, preventing one category
+from appearing as both referenced and missing. Neither change alters policy or evaluation scoring.
+
+`needs_review` is reserved for plausible competing supported causes or material unresolved
+contradiction. The public result remains backward compatible by representing review as an
+abstention while retaining the typed policy outcome, reason, and candidate labels in the new path's
+structured evaluation result. This is still a single-pass experiment: it adds no agent loop,
+retry, routing, or human-review UI.
+
+Prompt v3 remains frozen as the Milestone 11 comparison baseline. The untested hypothesis is that
+the policy-controlled path may retain semantic generalization while reducing unsafe diagnoses in
+ambiguous cases; no score is claimed before a live evaluation. The design and full decision table
+are documented in the
 [Milestone 12 architecture note](docs/architecture/milestone-12-uncertainty-decision-policy.md).
 
 ## Local Experiment Tracking
@@ -720,6 +777,53 @@ The evaluation CLI loads `.env` from the current directory. Explicit `--provider
 arguments override those environment defaults. Credentials are never stored in experiment
 metadata.
 
+Run the policy-controlled uncertainty path over the original 16-scenario benchmark:
+
+```bash
+python -m ai_investigation.evaluate \
+  --investigator llm-policy \
+  --provider groq \
+  --model llama-3.3-70b-versatile \
+  --prompt-version v4-uncertainty \
+  --scenarios tests/fixtures/evaluation_scenarios_m10.json \
+  --request-delay-seconds 4 \
+  --save-experiment \
+  --tag milestone-12-policy-original
+```
+
+Rerun the candidate-semantics correction as a separate experiment:
+
+```bash
+python -m ai_investigation.evaluate \
+  --investigator llm-policy \
+  --provider groq \
+  --model llama-3.3-70b-versatile \
+  --prompt-version v4-uncertainty-candidate-semantics \
+  --scenarios tests/fixtures/evaluation_scenarios_m10.json \
+  --request-delay-seconds 4 \
+  --save-experiment \
+  --tag milestone-12-candidate-semantics
+```
+
+Run it over the frozen 20-scenario holdout without changing v3 or the holdout data:
+
+```bash
+python -m ai_investigation.evaluate \
+  --investigator llm-policy \
+  --provider groq \
+  --model llama-3.3-70b-versatile \
+  --prompt-version v4-uncertainty \
+  --scenarios tests/fixtures/evaluation_scenarios_holdout_m11.json \
+  --request-delay-seconds 4 \
+  --save-experiment \
+  --tag milestone-12-policy-holdout
+```
+
+Experiments from this mode record the investigator, provider, model, uncertainty prompt version,
+response-schema version, and deterministic policy version. Reports add policy outcome, reason, and
+candidate diagnoses per scenario plus diagnosis, abstention, review, single-candidate, and
+multi-candidate counts. Existing deterministic and LLM report fields retain their meanings.
+
 The real-provider smoke test is skipped by default and makes at most one request when enabled:
 
 ```bash
@@ -835,6 +939,9 @@ Completed
         │
         v
   explicit uncertainty model and deterministic decision policy
+        │
+        v
+  policy-controlled LLM uncertainty experiment path
 
 Possible directions
   ├── graph orchestration if branching complexity justifies it

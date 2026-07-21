@@ -66,7 +66,7 @@ class ScenarioRunResult:
     """Independent evaluation dimensions for one investigator and scenario."""
 
     scenario_id: str
-    investigator: Literal["deterministic", "gemini", "llm"]
+    investigator: Literal["deterministic", "gemini", "llm", "llm-policy"]
     execution_status: str
     expected_execution_status: str | None
     execution_status_matches: bool | None
@@ -89,6 +89,10 @@ class ScenarioRunResult:
     deterministic_model_agreement: bool | None = None
     robustness_categories: tuple[str, ...] = ()
     error_category: ErrorCategory | None = None
+    policy_outcome: str | None = None
+    policy_reason: str | None = None
+    candidate_diagnoses: tuple[str, ...] = ()
+    rejected_hypothesis_diagnoses: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,13 +120,23 @@ class AggregateMetrics:
     average_confidence_correct: float | None
     average_confidence_incorrect: float | None
     error_categories: tuple[tuple[str, int], ...] = ()
+    policy_diagnoses: int = 0
+    policy_abstentions: int = 0
+    policy_needs_review: int = 0
+    single_candidate_assessments: int = 0
+    multi_candidate_assessments: int = 0
+    zero_candidate_assessments: int = 0
+    rejected_hypotheses_total: int = 0
+    assessments_with_rejected_hypotheses: int = 0
 
 
 @dataclass(frozen=True, slots=True)
 class EvaluationReport:
     """A complete reusable experiment report without provider-specific fields."""
 
-    investigator_mode: Literal["deterministic", "gemini", "llm", "both"]
+    investigator_mode: Literal[
+        "deterministic", "gemini", "llm", "llm-policy", "both"
+    ]
     scenarios: tuple[ScenarioRunResult, ...]
     aggregate: AggregateMetrics
     confidence_disclaimer: str = "Model confidence is self-reported and uncalibrated."

@@ -19,6 +19,7 @@ EXECUTION_STATUSES = {
     "invalid_references",
     "refused",
     "provider_failure",
+    "adapter_failure",
 }
 ROBUSTNESS_CATEGORIES = {
     "wording_variation",

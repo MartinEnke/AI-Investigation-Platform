@@ -108,6 +108,7 @@ def _render_record(record, path: Path, show_events: bool) -> str:
         f"Provider: {metadata.provider or 'none'}",
         f"Model: {metadata.model or 'none'}",
         f"Prompt version: {metadata.prompt_version or 'none'}",
+        f"Decision policy: {metadata.decision_policy_version or 'none'}",
         f"Scenario source: {metadata.scenario_source}",
         f"Scenarios: {metadata.scenario_count}",
         f"Revision: {metadata.repository_revision or 'unavailable'}",

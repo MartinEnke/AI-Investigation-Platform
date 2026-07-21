@@ -201,6 +201,15 @@ def test_old_experiment_without_prompt_metadata_remains_readable(
     value = json.loads(experiment_to_json(tracked_record(fixture_directory)))
     value["metadata"].pop("prompt_version")
     value["metadata"].pop("response_schema_version")
+    value["metadata"].pop("decision_policy_version")
+    for field in (
+        "zero_candidate_assessments",
+        "rejected_hypotheses_total",
+        "assessments_with_rejected_hypotheses",
+    ):
+        value["report"]["aggregate"].pop(field)
+    for scenario in value["report"]["scenarios"]:
+        scenario.pop("rejected_hypothesis_diagnoses")
     artifact = tmp_path / "experiment.json"
     artifact.write_text(json.dumps(value), encoding="utf-8")
 
@@ -208,7 +217,28 @@ def test_old_experiment_without_prompt_metadata_remains_readable(
 
     assert loaded.metadata.prompt_version is None
     assert loaded.metadata.response_schema_version is None
+    assert loaded.metadata.decision_policy_version is None
     assert compare_experiments(loaded, tracked_record(fixture_directory)).summary.regressed == 0
+
+
+def test_historical_candidate_semantics_schema_metadata_remains_readable(
+    fixture_directory: Path,
+    tmp_path: Path,
+) -> None:
+    value = json.loads(experiment_to_json(tracked_record(fixture_directory)))
+    value["metadata"]["prompt_version"] = (
+        "llm-investigator-v4-uncertainty-candidate-semantics"
+    )
+    value["metadata"]["response_schema_version"] = "llm-uncertainty-proposal-v3"
+    artifact = tmp_path / "historical-experiment.json"
+    artifact.write_text(json.dumps(value), encoding="utf-8")
+
+    loaded = load_experiment(artifact)
+
+    assert loaded.metadata.prompt_version == (
+        "llm-investigator-v4-uncertainty-candidate-semantics"
+    )
+    assert loaded.metadata.response_schema_version == "llm-uncertainty-proposal-v3"
 
 
 def test_listing_skips_malformed_experiments(fixture_directory: Path, tmp_path: Path) -> None:

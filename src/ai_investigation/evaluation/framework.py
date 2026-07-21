@@ -2,7 +2,7 @@
 
 from collections import Counter
 from collections.abc import Callable, Iterable
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
 import json
 import time
 from typing import Literal
@@ -28,12 +28,39 @@ from ai_investigation.llm_investigator import (
     StructuredModel,
 )
 from ai_investigation.models import InvestigationResult
+from ai_investigation.uncertainty_investigator import (
+    CANDIDATE_SEMANTICS_PROMPT_SELECTION,
+    LLMPolicyInvestigationFailure,
+    LLMPolicyInvestigationSuccess,
+    LLMPolicyInvestigator,
+    UNCERTAINTY_PROMPT_SELECTION,
+    uncertainty_prompt_identifier,
+    uncertainty_schema_identifier,
+)
 
-InvestigatorMode = Literal["deterministic", "gemini", "llm", "both"]
+InvestigatorMode = Literal["deterministic", "gemini", "llm", "llm-policy", "both"]
+EvaluationPromptVersion = PromptVersion | Literal[
+    "v4-uncertainty", "v4-uncertainty-candidate-semantics"
+]
 EventObserver = Callable[
     [str, str | None, str | None, str, str, float | None, tuple[tuple[str, str], ...]],
     None,
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class UncertaintyDebugTrace:
+    scenario_id: str
+    requested_prompt_version: str
+    resolved_prompt_identifier: str
+    resolved_schema_version: str
+    raw_provider_response: str | None
+    parsed_supported_candidates: tuple[str, ...]
+    parsed_rejected_hypotheses: tuple[str, ...]
+    policy_candidates: tuple[str, ...]
+    policy_outcome: str | None
+    evaluation_supported_candidates: tuple[str, ...]
+    evaluation_rejected_hypotheses: tuple[str, ...]
 
 
 def run_experiment(
@@ -43,20 +70,29 @@ def run_experiment(
     *,
     investigator_mode: InvestigatorMode = "deterministic",
     structured_model: StructuredModel | None = None,
-    prompt_version: PromptVersion = DEFAULT_PROMPT_VERSION,
+    prompt_version: EvaluationPromptVersion = DEFAULT_PROMPT_VERSION,
     request_delay_seconds: float = 0.0,
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.perf_counter,
     observer: EventObserver | None = None,
+    uncertainty_debug: Callable[[UncertaintyDebugTrace], None] | None = None,
 ) -> EvaluationReport:
     """Evaluate selected reasoning paths, sharing one evidence collection per scenario."""
 
-    if investigator_mode not in ("deterministic", "gemini", "llm", "both"):
+    if investigator_mode not in ("deterministic", "gemini", "llm", "llm-policy", "both"):
         raise ValueError(f"Unknown investigator mode: {investigator_mode}.")
-    if investigator_mode in ("gemini", "llm", "both") and structured_model is None:
+    if investigator_mode in ("gemini", "llm", "llm-policy", "both") and structured_model is None:
         raise ValueError("A structured model is required for Gemini evaluation.")
     if request_delay_seconds < 0:
         raise ValueError("Request delay must be non-negative.")
+    uncertainty_prompts = {
+        UNCERTAINTY_PROMPT_SELECTION,
+        CANDIDATE_SEMANTICS_PROMPT_SELECTION,
+    }
+    if investigator_mode == "llm-policy" and prompt_version not in uncertainty_prompts:
+        raise ValueError("llm-policy requires an uncertainty prompt version.")
+    if investigator_mode != "llm-policy" and prompt_version in uncertainty_prompts:
+        raise ValueError("Uncertainty prompts are only valid for llm-policy evaluation.")
 
     selected_scenarios = tuple(scenarios)
     experiment_started = clock()
@@ -65,9 +101,12 @@ def run_experiment(
     deterministic_adapter = DeterministicInvestigatorAdapter(deterministic_investigator)
     provider_investigator = (
         LLMInvestigator(structured_model)
-        if structured_model is not None and prompt_version == DEFAULT_PROMPT_VERSION
+        if structured_model is not None
+        and investigator_mode in ("gemini", "llm", "both")
+        and prompt_version == DEFAULT_PROMPT_VERSION
         else LLMInvestigator(structured_model, prompt_version)
         if structured_model is not None
+        and investigator_mode in ("gemini", "llm", "both")
         else None
     )
     llm_investigator = (
@@ -77,6 +116,11 @@ def run_experiment(
             prompt_version,
         )
         if structured_model is not None and investigator_mode in ("gemini", "llm", "both")
+        else None
+    )
+    policy_investigator = (
+        LLMPolicyInvestigator(structured_model, prompt_version)
+        if structured_model is not None and investigator_mode == "llm-policy"
         else None
     )
     provider_request_completed = False
@@ -207,6 +251,105 @@ def run_experiment(
                 event_type,
                 scenario.id,
                 model_investigator_name,
+                "evaluation",
+                model_result.semantic_correctness_status,
+                evaluation_duration,
+                (("execution_status", model_result.execution_status),),
+            )
+
+        if investigator_mode == "llm-policy":
+            assert policy_investigator is not None
+            provider_call_expected = (
+                collected.request.deployment_id is not None
+                and collected.deployment is not None
+            )
+            if (
+                provider_call_expected
+                and provider_request_completed
+                and request_delay_seconds > 0
+            ):
+                sleep(request_delay_seconds)
+            _emit(
+                observer,
+                "model_investigation_started",
+                scenario.id,
+                "llm-policy",
+                "investigation",
+                "started",
+            )
+            started = clock()
+            policy_outcome = policy_investigator.investigate(collected)
+            if provider_call_expected:
+                provider_request_completed = True
+            latency_ms = (clock() - started) * 1000
+            _emit(
+                observer,
+                "model_investigation_completed",
+                scenario.id,
+                "llm-policy",
+                "investigation",
+                policy_outcome.status,
+                latency_ms,
+            )
+            _emit(
+                observer,
+                "validation_completed",
+                scenario.id,
+                "llm-policy",
+                "validation",
+                policy_outcome.status,
+            )
+            evaluation_started = clock()
+            model_result = _evaluate_policy(scenario, policy_outcome, latency_ms)
+            if uncertainty_debug is not None:
+                if isinstance(policy_outcome, LLMPolicyInvestigationSuccess):
+                    parsed_supported = tuple(
+                        item.diagnosis_id for item in policy_outcome.proposal.candidates
+                    )
+                    parsed_rejected = tuple(
+                        item.diagnosis_id
+                        for item in policy_outcome.proposal.rejected_hypotheses
+                    )
+                    policy_candidates = tuple(
+                        item.candidate.diagnosis
+                        for item in policy_outcome.uncertainty.candidates
+                    )
+                    policy_decision = policy_outcome.decision.outcome.value
+                else:
+                    parsed_supported = parsed_rejected = policy_candidates = ()
+                    policy_decision = None
+                uncertainty_debug(
+                    UncertaintyDebugTrace(
+                        scenario_id=scenario.id,
+                        requested_prompt_version=prompt_version,
+                        resolved_prompt_identifier=uncertainty_prompt_identifier(
+                            prompt_version
+                        ),
+                        resolved_schema_version=uncertainty_schema_identifier(
+                            prompt_version
+                        ),
+                        raw_provider_response=policy_outcome.raw_response,
+                        parsed_supported_candidates=parsed_supported,
+                        parsed_rejected_hypotheses=parsed_rejected,
+                        policy_candidates=policy_candidates,
+                        policy_outcome=policy_decision,
+                        evaluation_supported_candidates=model_result.candidate_diagnoses,
+                        evaluation_rejected_hypotheses=(
+                            model_result.rejected_hypothesis_diagnoses
+                        ),
+                    )
+                )
+            evaluation_duration = (clock() - evaluation_started) * 1000
+            event_type = (
+                "scenario_failed"
+                if model_result.execution_status not in ("completed", "not_evaluated")
+                else "scenario_evaluated"
+            )
+            _emit(
+                observer,
+                event_type,
+                scenario.id,
+                "llm-policy",
                 "evaluation",
                 model_result.semantic_correctness_status,
                 evaluation_duration,
@@ -349,7 +492,21 @@ def render_text_report(report: EvaluationReport) -> str:
                 aggregate.agreement_cases,
             )
         )
-    if report.investigator_mode in ("gemini", "llm", "both"):
+    if report.investigator_mode == "llm-policy":
+        lines.extend(
+            (
+                f"Policy diagnoses: {aggregate.policy_diagnoses}",
+                f"Policy abstentions: {aggregate.policy_abstentions}",
+                f"Policy needs review: {aggregate.policy_needs_review}",
+                f"Zero-supported-candidate assessments: {aggregate.zero_candidate_assessments}",
+                f"Single-supported-candidate assessments: {aggregate.single_candidate_assessments}",
+                f"Multi-supported-candidate assessments: {aggregate.multi_candidate_assessments}",
+                f"Rejected hypotheses: {aggregate.rejected_hypotheses_total}",
+                "Assessments with rejected hypotheses: "
+                f"{aggregate.assessments_with_rejected_hypotheses}",
+            )
+        )
+    if report.investigator_mode in ("gemini", "llm", "llm-policy", "both"):
         lines.extend((f"Confidence: {report.confidence_disclaimer}", ""))
     else:
         lines.append("")
@@ -436,10 +593,66 @@ def _evaluate_model(
     )
 
 
+def _evaluate_policy(
+    scenario: EvaluationScenario,
+    outcome: LLMPolicyInvestigationSuccess | LLMPolicyInvestigationFailure,
+    latency_ms: float,
+) -> ScenarioRunResult:
+    if isinstance(outcome, LLMPolicyInvestigationSuccess):
+        decision = outcome.decision
+        result = _scenario_result(
+            scenario=scenario,
+            investigator="llm-policy",
+            execution_status="completed",
+            actual_diagnosis_id=decision.diagnosis,
+            actual_abstention=decision.outcome.value != "diagnosis",
+            evidence_references_valid=True,
+            structured_response_valid=True,
+            referenced_sources=tuple(item.source for item in outcome.result.evidence),
+            confidence=outcome.result.confidence,
+            latency_ms=latency_ms,
+            error=None,
+        )
+        return replace(
+            result,
+            policy_outcome=decision.outcome.value,
+            policy_reason=decision.reason.value,
+            candidate_diagnoses=tuple(
+                item.candidate.diagnosis for item in outcome.uncertainty.candidates
+            ),
+            rejected_hypothesis_diagnoses=tuple(
+                item.diagnosis_id for item in outcome.proposal.rejected_hypotheses
+            ),
+        )
+
+    assert isinstance(outcome, LLMPolicyInvestigationFailure)
+    return _scenario_result(
+        scenario=scenario,
+        investigator="llm-policy",
+        execution_status=outcome.status,
+        actual_diagnosis_id=None,
+        actual_abstention=True if outcome.status == "not_evaluated" else None,
+        evidence_references_valid=(
+            False if outcome.status == "invalid_references" else None
+        ),
+        structured_response_valid=(
+            False
+            if outcome.status == "invalid_response"
+            else True
+            if outcome.status in ("invalid_references", "adapter_failure")
+            else None
+        ),
+        referenced_sources=(),
+        confidence=None,
+        latency_ms=latency_ms,
+        error="; ".join(outcome.errors),
+    )
+
+
 def _scenario_result(
     *,
     scenario: EvaluationScenario,
-    investigator: Literal["deterministic", "gemini", "llm"],
+    investigator: Literal["deterministic", "gemini", "llm", "llm-policy"],
     execution_status: str,
     actual_diagnosis_id: str | None,
     actual_abstention: bool | None,
@@ -538,22 +751,13 @@ def _deterministic_diagnosis_id(result: InvestigationResult) -> str | None:
 def _source_differences(
     expected: tuple[str, ...], actual: tuple[str, ...]
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    missing_counts = Counter(expected) - Counter(actual)
-    unexpected_counts = Counter(actual) - Counter(expected)
-    missing = _ordered_counter_values(expected, missing_counts)
-    unexpected = _ordered_counter_values(actual, unexpected_counts)
+    expected_categories = tuple(dict.fromkeys(expected))
+    actual_categories = tuple(dict.fromkeys(actual))
+    expected_set = set(expected_categories)
+    actual_set = set(actual_categories)
+    missing = tuple(source for source in expected_categories if source not in actual_set)
+    unexpected = tuple(source for source in actual_categories if source not in expected_set)
     return missing, unexpected
-
-
-def _ordered_counter_values(
-    values: tuple[str, ...], counts: Counter[str]
-) -> tuple[str, ...]:
-    selected: list[str] = []
-    for value in values:
-        if counts[value] > 0:
-            selected.append(value)
-            counts[value] -= 1
-    return tuple(selected)
 
 
 def _agreement(
@@ -585,13 +789,13 @@ def _aggregate(
     agreements = tuple(
         result
         for result in results
-        if result.investigator in ("gemini", "llm")
+        if result.investigator in ("gemini", "llm", "llm-policy")
         and result.deterministic_model_agreement is not None
     )
     correct_confidence = tuple(
         result.confidence
         for result in results
-        if result.investigator in ("gemini", "llm")
+        if result.investigator in ("gemini", "llm", "llm-policy")
         and result.semantic_correctness_status == "correct"
         and result.confidence is not None
     )
@@ -649,6 +853,31 @@ def _aggregate(
                 "not_evaluated",
             )
             if error_counts[category]
+        ),
+        policy_diagnoses=sum(
+            result.policy_outcome == "diagnosis" for result in results
+        ),
+        policy_abstentions=sum(
+            result.policy_outcome == "abstention" for result in results
+        ),
+        policy_needs_review=sum(
+            result.policy_outcome == "needs_review" for result in results
+        ),
+        single_candidate_assessments=sum(
+            len(result.candidate_diagnoses) == 1 for result in results
+        ),
+        multi_candidate_assessments=sum(
+            len(result.candidate_diagnoses) > 1 for result in results
+        ),
+        zero_candidate_assessments=sum(
+            result.policy_outcome is not None and not result.candidate_diagnoses
+            for result in results
+        ),
+        rejected_hypotheses_total=sum(
+            len(result.rejected_hypothesis_diagnoses) for result in results
+        ),
+        assessments_with_rejected_hypotheses=sum(
+            bool(result.rejected_hypothesis_diagnoses) for result in results
         ),
     )
 
@@ -752,6 +981,21 @@ def _scenario_lines(result: ScenarioRunResult) -> list[str]:
         lines.append(f"Confidence: {result.confidence:.2f}")
     if result.error_category is not None:
         lines.append(f"Error category: {result.error_category}")
+    if result.policy_outcome is not None:
+        lines.append(f"Policy outcome: {result.policy_outcome}")
+        lines.append(f"Policy reason: {result.policy_reason}")
+        lines.append(
+            "Supported candidate diagnoses: "
+            + (", ".join(result.candidate_diagnoses) or "none")
+        )
+        lines.append(f"Supported candidate count: {len(result.candidate_diagnoses)}")
+        lines.append(
+            "Rejected hypothesis diagnoses: "
+            + (", ".join(result.rejected_hypothesis_diagnoses) or "none")
+        )
+        lines.append(
+            f"Rejected hypothesis count: {len(result.rejected_hypothesis_diagnoses)}"
+        )
     lines.append(f"Latency: {result.latency_ms:.3f} ms")
     return lines
 

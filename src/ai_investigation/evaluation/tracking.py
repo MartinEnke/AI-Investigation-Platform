@@ -68,6 +68,7 @@ class ExperimentMetadata:
     notes: str | None
     prompt_version: str | None = None
     response_schema_version: str | None = None
+    decision_policy_version: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +168,7 @@ def create_metadata(
     notes: str | None = None,
     prompt_version: str | None = None,
     response_schema_version: str | None = None,
+    decision_policy_version: str | None = None,
     now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     revision_resolver: Callable[[], str | None] = lambda: resolve_git_revision(),
     token_factory: Callable[[], str] = lambda: secrets.token_hex(3),
@@ -200,6 +202,9 @@ def create_metadata(
         prompt_version=(prompt_version if investigator_mode != "deterministic" else None),
         response_schema_version=(
             response_schema_version if investigator_mode != "deterministic" else None
+        ),
+        decision_policy_version=(
+            decision_policy_version if investigator_mode != "deterministic" else None
         ),
     )
 
@@ -359,6 +364,10 @@ def _record_from_dict(value: object) -> ExperimentRecord:
                 "missing_sources": tuple(item["missing_sources"]),
                 "unexpected_sources": tuple(item["unexpected_sources"]),
                 "robustness_categories": tuple(item.get("robustness_categories", ())),
+                "candidate_diagnoses": tuple(item.get("candidate_diagnoses", ())),
+                "rejected_hypothesis_diagnoses": tuple(
+                    item.get("rejected_hypothesis_diagnoses", ())
+                ),
             }
         )
         for item in report_value["scenarios"]

@@ -88,6 +88,7 @@ class ExperimentIdentity:
     model: str | None
     scenario_count: int
     prompt_version: str | None = None
+    decision_policy_version: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -406,6 +407,7 @@ def _identity(record: "ExperimentRecord") -> ExperimentIdentity:
         model=metadata.model,
         scenario_count=metadata.scenario_count,
         prompt_version=metadata.prompt_version,
+        decision_policy_version=metadata.decision_policy_version,
     )
 
 
@@ -490,7 +492,10 @@ def _median_latency(report: EvaluationReport) -> float | None:
 
 
 def _validation_failure_count(report: EvaluationReport) -> float | None:
-    if not any(result.investigator in ("gemini", "llm") for result in report.scenarios):
+    if not any(
+        result.investigator in ("gemini", "llm", "llm-policy")
+        for result in report.scenarios
+    ):
         return None
     return float(report.aggregate.invalid_responses + report.aggregate.invalid_references)
 
@@ -651,6 +656,11 @@ def _identity_label(identity: ExperimentIdentity) -> str:
         for item in (
             provider or None,
             f"prompt={identity.prompt_version}" if identity.prompt_version else None,
+            (
+                f"policy={identity.decision_policy_version}"
+                if identity.decision_policy_version
+                else None
+            ),
         )
         if item
     )
