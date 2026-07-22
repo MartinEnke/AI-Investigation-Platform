@@ -238,7 +238,7 @@ conflicting_supported_candidates = len(supported_candidates) > 1
 ```
 
 The active `v4-uncertainty-candidate-semantics` selection now resolves to
-`llm-investigator-v4-uncertainty-candidate-semantics-contract-v2` and
+`llm-investigator-v4-uncertainty-candidate-semantics-contract-v3` and
 `llm-uncertainty-proposal-v4`. Schema v4 removes the conflict field. Parsing always derives it from
 the supported list. For compatibility, the parser also accepts a legacy schema-v3 response that
 still contains the field, ignores its value, and derives the authoritative result. Stored
@@ -253,6 +253,11 @@ No other uncertainty field was removable without losing semantic input:
 
 This hardening does not change candidate semantics or policy. Two supported candidates still derive
 conflict and produce `needs_review`; zero or one cannot produce conflict.
+
+The supported and rejected collections are also explicitly mutually exclusive: a diagnosis ID may
+occur in either collection, but never both. The parser retains strict rejection of overlaps and now
+reports every overlapping diagnosis ID in stable sorted order. This is structural contract
+validation only; candidate eligibility and deterministic policy behavior remain unchanged.
 
 The source-reporting inconsistency was separate and limited to evaluator projection. Expected
 evidence sources may contain repeated categories because multiple log records are expected. The

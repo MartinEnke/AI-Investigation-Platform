@@ -123,6 +123,11 @@ def test_candidate_semantics_prompt_is_new_and_baseline_remains_identifiable(
     assert "Absence of contradiction is not support" in prompt
     assert "Semantic similarity is not support" in prompt
     assert "rejected_hypotheses" in prompt
+    assert "A diagnosis ID must appear in at most one collection" in prompt
+    assert (
+        "it may appear in supported_candidates or rejected_hypotheses, but never both"
+        in prompt
+    )
 
 
 @pytest.mark.parametrize(

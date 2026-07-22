@@ -31,7 +31,7 @@ from ai_investigation.models import InvestigationResult
 UNCERTAINTY_PROMPT_VERSION = "llm-investigator-v4-uncertainty-contract-v2"
 UNCERTAINTY_RESPONSE_SCHEMA_VERSION = "llm-uncertainty-proposal-v2"
 CANDIDATE_SEMANTICS_PROMPT_VERSION = (
-    "llm-investigator-v4-uncertainty-candidate-semantics-contract-v2"
+    "llm-investigator-v4-uncertainty-candidate-semantics-contract-v3"
 )
 CANDIDATE_SEMANTICS_RESPONSE_SCHEMA_VERSION = "llm-uncertainty-proposal-v4"
 HISTORICAL_CANDIDATE_SEMANTICS_PROMPT_VERSION = (
@@ -305,7 +305,9 @@ def _build_candidate_semantics_prompt(collected: CollectedEvidence) -> str:
         "zero supported candidates when no diagnosis is directly supported, one when one diagnosis "
         "clearly explains the evidence, and multiple only when each could independently explain the "
         "failure and genuine unresolved causal ambiguity remains after considering all evidence. "
-        "Place considered but unsupported alternatives in rejected_hypotheses. Confidence is "
+        "Place considered but unsupported alternatives in rejected_hypotheses. A diagnosis ID "
+        "must appear in at most one collection: it may appear in supported_candidates or "
+        "rejected_hypotheses, but never both. Confidence is "
         "metadata, never a "
         "substitute for evidence. Evidence identity and source availability are validated by the "
         "application; do not infer or return missing-source metadata. Use only exact evidence IDs "
@@ -422,8 +424,12 @@ def parse_candidate_semantics_proposal(raw_response: str) -> LLMUncertaintyPropo
         raise ValueError("Supported candidate diagnosis IDs must be unique.")
     if len(rejected_ids) != len(set(rejected_ids)):
         raise ValueError("Rejected hypothesis diagnosis IDs must be unique.")
-    if set(candidate_ids) & set(rejected_ids):
-        raise ValueError("A diagnosis cannot be both supported and rejected.")
+    overlapping_ids = sorted(set(candidate_ids) & set(rejected_ids))
+    if overlapping_ids:
+        raise ValueError(
+            "Diagnoses cannot be both supported and rejected: "
+            + ", ".join(overlapping_ids)
+        )
 
     flags: dict[str, bool] = {}
     for field in (
