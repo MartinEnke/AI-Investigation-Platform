@@ -408,6 +408,13 @@ derives conflict exactly from the supported-candidate count, while legacy schema
 readable. Source-difference reporting also uses unique source categories, preventing one category
 from appearing as both referenced and missing. Neither change alters policy or evaluation scoring.
 
+Milestone 12.5 adds the versioned `diagnosis-catalogue-v1`, giving every supported diagnosis explicit
+qualifying evidence, insufficient evidence, negative boundaries, causal role, and related-diagnosis
+distinctions. The catalogue is rendered deterministically into the existing candidate-semantics
+prompt so semantic selection can be measured against the frozen Milestone 12.4 baseline. The response
+schema and deterministic decision policy are unchanged; no improvement is claimed before a new live
+benchmark is run.
+
 `needs_review` is reserved for plausible competing supported causes or material unresolved
 contradiction. The public result remains backward compatible by representing review as an
 abstention while retaining the typed policy outcome, reason, and candidate labels in the new path's

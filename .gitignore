@@ -15,3 +15,5 @@ coverage/
 !.env.example
 
 experiments/runs/
+
+.DS_Store

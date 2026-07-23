@@ -18,6 +18,10 @@ from ai_investigation.decision_policy import (
     UncertaintyAssessment,
     decide_investigation,
 )
+from ai_investigation.diagnosis_catalogue import (
+    DIAGNOSIS_CATALOGUE_VERSION,
+    render_diagnosis_catalogue,
+)
 from ai_investigation.evidence import CollectedEvidence
 from ai_investigation.llm_investigator import (
     ModelProviderError,
@@ -31,7 +35,7 @@ from ai_investigation.models import InvestigationResult
 UNCERTAINTY_PROMPT_VERSION = "llm-investigator-v4-uncertainty-contract-v2"
 UNCERTAINTY_RESPONSE_SCHEMA_VERSION = "llm-uncertainty-proposal-v2"
 CANDIDATE_SEMANTICS_PROMPT_VERSION = (
-    "llm-investigator-v4-uncertainty-candidate-semantics-contract-v3"
+    "llm-investigator-v4-uncertainty-candidate-semantics-contract-v3-catalogue-v1"
 )
 CANDIDATE_SEMANTICS_RESPONSE_SCHEMA_VERSION = "llm-uncertainty-proposal-v4"
 HISTORICAL_CANDIDATE_SEMANTICS_PROMPT_VERSION = (
@@ -294,14 +298,18 @@ def _build_candidate_semantics_prompt(collected: CollectedEvidence) -> str:
         "facts only; do not choose a final diagnosis, abstention, or review outcome. Do not return "
         "every diagnosis you considered as a supported candidate. A supported candidate has direct "
         "positive, diagnosis-specific evidence and could independently explain the observed "
-        "failure. A rejected hypothesis was considered but lacks direct support, is contradicted, "
+        "failure. Shared vocabulary, thematic relevance, and plausibility are insufficient without "
+        "direct diagnosis-specific support. Do not map generic evidence to the nearest available "
+        "diagnosis. A rejected hypothesis was considered but lacks direct support, is contradicted, "
         "is only a symptom, or is weaker than a supported cause. Absence of contradiction is not "
         "support. Semantic similarity is not support. Shared database vocabulary is not enough to "
         "support multiple database diagnoses. Do not reuse the same evidence as direct support for "
         "unrelated diagnoses without explicit justification. A timeout is not automatically a health-check "
         "failure, and an application crash is not automatically a migration failure. Do not make a "
         "downstream health symptom a second root-cause candidate when another diagnosis directly "
-        "explains it. Do not add a second supported candidate merely to express uncertainty. Use "
+        "explains it; prefer the supported upstream root cause and reject the downstream symptom as "
+        "not independently causal. Do not add a second supported candidate merely to express "
+        "uncertainty. Use "
         "zero supported candidates when no diagnosis is directly supported, one when one diagnosis "
         "clearly explains the evidence, and multiple only when each could independently explain the "
         "failure and genuine unresolved causal ambiguity remains after considering all evidence. "
@@ -316,6 +324,9 @@ def _build_candidate_semantics_prompt(collected: CollectedEvidence) -> str:
         "Supported diagnosis IDs: "
         + ", ".join(sorted(SUPPORTED_DIAGNOSES))
         + ".\n"
+        f"Diagnosis catalogue version: {DIAGNOSIS_CATALOGUE_VERSION}.\n"
+        "Operational diagnosis catalogue:\n"
+        f"{render_diagnosis_catalogue()}\n"
         f"Response schema version: {CANDIDATE_SEMANTICS_RESPONSE_SCHEMA_VERSION}.\n"
         "Response JSON schema:\n"
         f"{json.dumps(CANDIDATE_SEMANTICS_RESPONSE_JSON_SCHEMA, sort_keys=True, separators=(',', ':'))}\n\n"

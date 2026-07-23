@@ -274,6 +274,32 @@ the typed policy outcome, reason, and candidate labels. `needs_review` is reserv
 plausible supported causes or material unresolved contradiction, not for ordinary insufficient
 evidence.
 
+## Milestone 12.5: operational diagnosis boundaries
+
+The frozen Milestone 12.4 experiment
+`20260722T172036Z-llm-policy-ddd16fc-a0d30e` showed that structural hardening and safe policy routing
+were working, but broad diagnosis labels still left semantic overlap. Database-related signals were
+sometimes elevated to neighbouring diagnoses, and downstream health-check symptoms sometimes became
+independent candidates alongside an upstream cause. The baseline experiment and its artifacts remain
+immutable.
+
+Milestone 12.5 introduces the deterministic `diagnosis-catalogue-v1`. Each supported diagnosis has
+an immutable operational definition containing qualifying evidence, insufficient evidence, negative
+boundaries, causal role, and distinctions from related diagnoses. These definitions make both
+positive support and exclusion boundaries visible to the model without adding scenario identifiers,
+benchmark answers, or post-processing that rewrites its proposal.
+
+The public prompt alias remains `v4-uncertainty-candidate-semantics`; it now resolves to
+`llm-investigator-v4-uncertainty-candidate-semantics-contract-v3-catalogue-v1`. Response schema
+`llm-uncertainty-proposal-v4` remains unchanged. The prompt renders the catalogue deterministically
+and instructs the model to prefer a supported upstream cause when it explains a downstream symptom.
+Shared vocabulary, thematic relevance, and generic errors remain insufficient support.
+
+The deterministic decision policy is unchanged: zero candidates abstain, one complete moderate or
+strong candidate produces a diagnosis, and multiple genuinely supported candidates require review.
+The next live run is a controlled comparison against the frozen Milestone 12.4 baseline; no accuracy
+or abstention improvement is claimed before that experiment is performed.
+
 Experiment metadata records `llm-policy`, provider, model,
 `llm-investigator-v4-uncertainty-contract-v2`, the
 uncertainty response-schema version, and `deterministic-decision-policy-v1`. Scenario reports expose
